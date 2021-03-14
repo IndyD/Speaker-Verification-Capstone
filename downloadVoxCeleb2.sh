@@ -16,5 +16,5 @@ wget https://thor.robots.ox.ac.uk/~vgg/data/voxceleb/vox1a/vox2_test_aac.zip
 cat vox2_dev_aac* > vox2_aac.zip
 unzip -d data vox2_aac.zip
 unzip -d data vox2_test_aac.zip
-rm vox2_dev_aac*
+rm vox2_aac.zip
 rm vox2_test_aac.zip
