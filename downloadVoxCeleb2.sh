@@ -10,11 +10,11 @@ wget https://thor.robots.ox.ac.uk/~vgg/data/voxceleb/vox1a/vox2_dev_aac_partaf &
 wget https://thor.robots.ox.ac.uk/~vgg/data/voxceleb/vox1a/vox2_dev_aac_partag &&
 wget https://thor.robots.ox.ac.uk/~vgg/data/voxceleb/vox1a/vox2_dev_aac_partah &&
 wget https://thor.robots.ox.ac.uk/~vgg/data/voxceleb/vox1a/vox2_dev_aac_partai &&
-wget https://thor.robots.ox.ac.uk/~vgg/data/voxceleb/vox1a/vox2_test_aac.zip 
+wget https://thor.robots.ox.ac.uk/~vgg/data/voxceleb/vox1a/vox2_test_aac.zip &&
 
 ## gather data
 cat vox2_dev_aac* > vox2_aac.zip
 unzip -d data vox2_aac.zip
-unzip -d data vox2_test_aac.zip
+unzip -d data vox2_test_aac.zip 
 rm vox2_aac.zip
 rm vox2_test_aac.zip
