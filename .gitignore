@@ -1,7 +1,11 @@
 .DS_Store
+data/
+test_data/
 *.csv
 *.wav
 *.zip
+*.aac
+*.mp4
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
