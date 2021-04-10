@@ -1,9 +1,6 @@
 
 {
   "PATHS":{
-    "directory_train":"dataset_train",
-    "directory_valid":"dataset_valid",
-    "directory_test":"dataset_test",
     "file_train":"train_speakers.txt",
     "file_valid":"valid_speakers.txt",
     "file_test":"test_speakers.txt",
@@ -29,7 +26,7 @@
 
   },
   "DATA_GENERATOR":{
-    "data_type":"EmphSpec",
+    "data_type":"Spec256",
     "window":1,
     "sample_rate":16000,
     "nperseg":0.025,
@@ -38,9 +35,9 @@
     "rounds_train":259,
     "rounds_valid":17,
     "rounds_test":17,
-    "num_train_files":16,
-    "num_valid_files":8,
-    "num_test_files":8,
+    "num_train_files":30,
+    "num_valid_files":30,
+    "num_test_files":30,
     "n_row_tf_record":1000
   }
 }

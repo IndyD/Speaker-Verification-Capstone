@@ -13,7 +13,7 @@ from __future__ import print_function
 
 from scipy.signal import lfilter, hamming
 from scipy.fftpack import fft
-from scikits.talkbox import segment_axis
+#from scikits.talkbox import segment_axis
 
 import datetime
 import os.path
@@ -163,14 +163,14 @@ def preemp(audio, p):
 	"""Pre-emphasis filter."""
 	return lfilter([1., -p], 1, audio)
 
-def get_emph_spec(audio, nperseg=256, noverlap = 96, nfft=512, fs=16000):
-	# Function to generate the emphasized spectrogram
-	prefac = 0.97
-	w = hamming(nperseg, sym=0)
-	extract = preemp(audio, prefac)
-	framed = segment_axis(extract, nperseg, noverlap) * w
-	spec = np.abs(fft(framed, nfft, axis=-1))
-	return spec
+#def get_emph_spec(audio, nperseg=256, noverlap = 96, nfft=512, fs=16000):
+#	# Function to generate the emphasized spectrogram
+#	prefac = 0.97
+#	w = hamming(nperseg, sym=0)
+#	extract = preemp(audio, prefac)
+#	framed = segment_axis(extract, nperseg, noverlap) * w
+#	spec = np.abs(fft(framed, nfft, axis=-1))
+#	return spec
 
 def generate_data(data_type, audio, start, end, samplerate = 16000):
 
@@ -184,9 +184,9 @@ def generate_data(data_type, audio, start, end, samplerate = 16000):
 		Hxx = StandardScaler().fit_transform(Sxx)
 		data_audio = np.reshape(Hxx[0:IN_HEIGHT,:],(IN_HEIGHT,IN_WIDTH,1))
 	
-	elif data_type == 'EmphSpec':
-		spec = get_emph_spec(audio_data, nperseg=NPERSEG, noverlap=NOVERLAP, nfft=NFFT,fs=samplerate)
-		data_audio = np.reshape(spec[:,:],(IN_HEIGHT, IN_WIDTH,1))	
+	#elif data_type == 'EmphSpec':
+	#	spec = get_emph_spec(audio_data, nperseg=NPERSEG, noverlap=NOVERLAP, nfft=NFFT,fs=samplerate)
+	#	data_audio = np.reshape(spec[:,:],(IN_HEIGHT, IN_WIDTH,1))	
 
 	return data_audio
 
