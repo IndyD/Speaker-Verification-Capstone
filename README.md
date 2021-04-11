@@ -8,6 +8,8 @@ python3 -m venv ~/.venv/capstone_env
 source ~/.venv/capstone_env/bin/activate
 pip3 install --upgrade pip
 pip install soundfile
+#### Also install librosa for spectral processing
+pip install soundfile
 
 #### Insatll ffmpeg to convert audio 
 conda install -c conda-forge ffmpeg
