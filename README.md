@@ -18,10 +18,10 @@ conda install -c conda-forge ffmpeg
 ### Always use screen for when running scripts
 
 #### Starting/Resuming a Screen:
-* Starting a screen:        screen -S <name> 
-* See what screens exist:   screen -ls
-* Resume a screen:          screen -r <name>
+* Starting a screen-        screen -S <name> 
+* See what screens exist-   screen -ls
+* Resume a screen-          screen -r <name>
   
 #### Commands while in screen:
-* Ctl-a d:   Detach from the screen
-* Ctl-a k:   Kill the screen
+* Ctl-a d-   Detach from the screen
+* Ctl-a k-   Kill the screen
