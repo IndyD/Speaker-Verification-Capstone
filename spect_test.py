@@ -16,6 +16,7 @@ S = librosa.feature.melspectrogram(
 )
 log_S = librosa.power_to_db(S, ref=np.max)
 print(log_S.shape)
+pdb.set_trace()
 
 plt.figure(figsize=(12,4))
 librosa.display.specshow(log_S, sr=sr, x_axis='time', y_axis='mel')

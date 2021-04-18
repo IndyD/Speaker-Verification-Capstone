@@ -20,7 +20,7 @@ def listdir_no_hidden(input):
     return dirlist
 
 def convert(path):
-    speaker_dirs = os.listdir(path)
+    speaker_dirs = listdir_no_hidden(path)
     for speaker in speaker_dirs:
         print('Converting {sp} from AAC to WAV'.format(sp=speaker))
         speaker_dir = os.path.join(path, speaker)
