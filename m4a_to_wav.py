@@ -27,8 +27,9 @@ def convert(path):
             for utterance in utterances:
                 utterance_path = os.path.join(speech_session_dir, utterance)
                 out_path = utterance_path.replace('.m4a','.wav')
-                call_str = 'ffmpeg -y -i %s -ac 1 -vn -acodec pcm_s16le -ar 16000 %s >/dev/null 2>/dev/null' %(utterance_path,out_path)
-                out = subprocess.call(call_str, shell=True)
+                if not os.path.isfile(out_path):
+                    call_str = 'ffmpeg -y -i %s -ac 1 -vn -acodec pcm_s16le -ar 16000 %s >/dev/null 2>/dev/null' %(utterance_path,out_path)
+                    out = subprocess.call(call_str, shell=True)
 
 if __name__ == '__main__':
     convert(sys.argv[1])
