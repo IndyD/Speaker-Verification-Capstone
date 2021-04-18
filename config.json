@@ -14,6 +14,7 @@
         "hop_length":222,
         "win_length":512,
         "max_frames":300,
-        "n_row_tf_record":1000
+        "n_pairs":1000,
+        "test_split":0.2
     }
   }
