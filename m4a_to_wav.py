@@ -14,16 +14,21 @@ path
 Example usage: python m4a_to_wav.py /work/users/idhillon/Speaker-Verification-Capstone/test_data/aac/
 """
 
+def listdir_no_hidden(input):
+    dirlist = os.listdir(input)
+    dirlist = [dir for dir in dirlist if not dir.startswith('.')]
+    return dirlist
+
 def convert(path):
     speaker_dirs = os.listdir(path)
     for speaker in speaker_dirs:
         print('Converting {sp} from AAC to WAV'.format(sp=speaker))
         speaker_dir = os.path.join(path, speaker)
-        speech_session_dirs = os.listdir(speaker_dir)
+        speech_session_dirs = listdir_no_hidden(speaker_dir)
 
         for speech_session in speech_session_dirs:
             speech_session_dir = os.path.join(speaker_dir, speech_session)
-            utterances = os.listdir(speech_session_dir)
+            utterances = listdir_no_hidden(speech_session_dir)
             for utterance in utterances:
                 utterance_path = os.path.join(speech_session_dir, utterance)
                 out_path = utterance_path.replace('.m4a','.wav')
