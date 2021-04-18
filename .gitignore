@@ -9,6 +9,7 @@ test_data/
 *.mp4
 *.m4a
 *.flac
+*.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
