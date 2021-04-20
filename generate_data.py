@@ -10,7 +10,7 @@ from collections import namedtuple, defaultdict
 import librosa
 import numpy as np
 import librosa.display
-from sklearn.model_selection import train_test_split
+import utils 
 
 import pdb
 logging.basicConfig(level=logging.INFO)
@@ -47,10 +47,10 @@ def generate_spectogram(wavpath, params):
     S = librosa.feature.melspectrogram(
         y, 
         sr, ## 22050 Hz
-        n_fft=params.DATA_GENERATOR.n_fft, ## recommended by librosa for speech, results in 23ms frames @22050
-        n_mels=params.DATA_GENERATOR.n_mels, ## too many mels resulted in empty banks
-        win_length=params.DATA_GENERATOR.win_length, 
-        hop_length=params.DATA_GENERATOR.hop_length, ## tried to do 10 ms step as per VGGVox
+        n_fft=params.DATA_GENERATOR.N_FFT, ## recommended by librosa for speech, results in 23ms frames @22050
+        n_mels=params.DATA_GENERATOR.N_MELS, ## too many mels resulted in empty banks
+        win_length=params.DATA_GENERATOR.WIN_LENGTH, 
+        hop_length=params.DATA_GENERATOR.HOP_LENGTH, ## tried to do 10 ms step as per VGGVox
     )
     log_S = librosa.power_to_db(S, ref=np.max)
 
@@ -60,10 +60,10 @@ def trim_spectogram(spect, params):
     """
     Trims spectograms so they are all the same length, if too short return None
     """
-    if spect.shape[1] < params.DATA_GENERATOR.max_frames:
+    if spect.shape[1] < params.DATA_GENERATOR.MAX_FRAMES:
         return None
     else:
-        return spect[:,:params.DATA_GENERATOR.max_frames]
+        return spect[:,:params.DATA_GENERATOR.MAX_FRAMES]
 
 def generate_spectograms(audio_dir, spectogram_path, params):
     """
@@ -83,6 +83,9 @@ def generate_spectograms(audio_dir, spectogram_path, params):
             utterance = get_biggest_file(speech_session_dir)
             spect = generate_spectogram(utterance, params)
             spect = trim_spectogram(spect, params)
+            ## Add an extra channel so the CNN works
+            spect = np.expand_dims(spect, axis=-1)
+
             if spect is not None:
                 speaker_spectograms[speaker].append(spect)
 
@@ -137,7 +140,6 @@ def make_contrastive_pairs(corpus_data, n_pairs):
     while len(pair_data) < n_pairs:
         speakers, data = find_negative_pair(corpus_data)
         if speakers not in neg_speaks:
-            pdb.set_trace()
             neg_speaks.add(speakers)
             pair_data.append(data)
             pair_labels.append([0])
@@ -145,33 +147,27 @@ def make_contrastive_pairs(corpus_data, n_pairs):
     return pair_data, pair_labels
 
 if __name__ == "__main__":
-    ### Initialize config file ###
-    if len(sys.argv) == 1:
-        raise ValueError("ERROR, need config file. Ie: python generate_data.py config.json")    
-    configuration_file = str(sys.argv[1])
-    with open(configuration_file, 'r') as f:
-        f = f.read()
-        PARAMS = json.loads(f, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
-
     ### Set variables from config file ###
-    audio_dir = os.path.join(PARAMS.PATHS.base_dir, PARAMS.PATHS.audio_dir)
-    output_dir = os.path.join(PARAMS.PATHS.base_dir, PARAMS.PATHS.output_dir)
-    spectogram_path = os.path.join(PARAMS.PATHS.base_dir, PARAMS.PATHS.spectogram_path)
+    PARAMS = utils.config_init(sys.argv)
+    audio_dir = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.AUDIO_DIR)
+    output_dir = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.OUTPUT_DIR)
+    spectogram_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.SPECT_PATH)
+    pairs_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.PAIRS_PATH)
 
     ### Generate or load spectograms ###
     if not os.path.isfile(spectogram_path):
+        logging.info("Generating spectograms...")
         speaker_spectograms = generate_spectograms(audio_dir, spectogram_path, PARAMS)
-        with open(spectogram_path, 'wb') as fout:
-            pickle.dump(speaker_spectograms, fout)
+        utils.save(speaker_spectograms, spectogram_path)
     else:
-        with open(spectogram_path, 'rb') as fin:
-            speaker_spectograms = pickle.load(fin)
+        utils.load(spectogram_path)
     
-    pairs, labels = make_contrastive_pairs(
-        speaker_spectograms, 
-        PARAMS.DATA_GENERATOR.n_pairs
-    )
+    ### Generate or contrastive pairs ###
+    if not os.path.isfile(pairs_path):
+        logging.info("Generating pairs for contrastive loss...")
+        pairs, labels = make_contrastive_pairs(
+            speaker_spectograms, 
+            PARAMS.DATA_GENERATOR.N_PAIRS
+        )
+        utils.save((pairs, labels), pairs_path)
 
-    pairs_train, pairs_test, y_train, y_test = train_test_split(
-        pairs, labels, test_size=PARAMS.DATA_GENERATOR.test_split, random_state=1
-    )

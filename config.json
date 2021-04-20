@@ -1,20 +1,22 @@
 {
     "PATHS":{
-        "base_dir":"/Users/indy/Documents/MSDS/git/Speaker-Verification-Capstone/",
-        "audio_dir":"test_data/aac/",
-        "output_dir":"test_data/output/",
-        "spectogram_path": "test_data/output/speaker_spectograms.pkl"
+        "BASE_DIR":"/Users/indy/Documents/MSDS/git/Speaker-Verification-Capstone/",
+        "AUDIO_DIR":"test_data/aac/",
+        "OUTPUT_DIR":"test_data/output/",
+        "SPECT_PATH": "test_data/output/speaker_spectograms.pkl",
+        "PAIRS_PATH": "test_data/output/contrastive_pairs.pkl"
     },
     "TRAINING": {
-  
+        "BATCH_SIZE":25,
+        "EPOCHS":10
     },
     "DATA_GENERATOR":{
-        "n_mels":130,
-        "n_fft":512,
-        "hop_length":222,
-        "win_length":512,
-        "max_frames":300,
-        "n_pairs":1000,
-        "test_split":0.2
+        "N_MELS":130,
+        "N_FFT":512,
+        "HOP_LENGTH":222,
+        "WIN_LENGTH":512,
+        "MAX_FRAMES":300,
+        "N_PAIRS":1000,
+        "TEST_SPLIT":0.2
     }
   }
