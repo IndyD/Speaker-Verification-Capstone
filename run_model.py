@@ -31,5 +31,7 @@ if __name__ == '__main__':
         [pairs_train[:, 0], pairs_train[:, 1]], label_train[:],
         validation_data=([pairs_test[:, 0], pairs_test[:, 1]], label_test[:]),
         batch_size=PARAMS.TRAINING.BATCH_SIZE,
-        epochs=PARAMS.TRAINING.EPOCHS)
+        epochs=PARAMS.TRAINING.EPOCHS,
+        verbose=1,
+        )
     pdb.set_trace()

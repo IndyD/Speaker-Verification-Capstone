@@ -1,8 +1,8 @@
 import tensorflow as tf
 import tensorflow.keras.backend as K
 import numpy as np
-from keras.models import Sequential, Model
-from keras.layers import Input, Dense, Dropout, Activation, Flatten, Lambda
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Input, Dense, Dropout, Activation, Flatten, Lambda
 
 import pdb
 
