@@ -25,7 +25,8 @@ if __name__ == '__main__':
     model = siamese_model.build_siamese_vgg7_model(IMG_SHAPE)
 
     pdb.set_trace()
-    model.compile(loss=siamese_model.contrastive_loss, optimizer="adam")
+    #model.compile(loss=siamese_model.contrastive_loss, optimizer="adam")
+    model.compile(loss=siamese_model.contrastive_loss_with_margin(margin=1), optimizer="adam")
     print("Training model...")
     history = model.fit(
         [pairs_train[:, 0], pairs_train[:, 1]], label_train[:],
