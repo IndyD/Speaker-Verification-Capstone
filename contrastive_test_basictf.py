@@ -61,10 +61,27 @@ def build_embedding_model(IMG_SHAPE):
 
     return model
 
+def build_vgg7_embedding_model(IMG_SHAPE):
+    ''' 
+    Return and embedding model using the fist 7 layer of VGG16 w/ 2 dense layers
+    This architechture is from the VGG7 implementaion of Velez
+    '''
+    ## Note that VGG16 was trained on 3 channels. We can't use the weights w/ 1 channel so set to None
+    VGG16 = tf.keras.applications.VGG16(input_shape=IMG_SHAPE, include_top=False, weights=None)
+    VGG7 = VGG16.layers[0:7]
+    embedding_layers = [
+        Flatten(name='flatten'),
+        Dense(1024),
+        Activation('relu'),
+        Dense(1024),
+        Activation('relu'),
+    ]
+    embedding_model = Sequential(VGG7 + embedding_layers)
+    return embedding_model
 
 def build_siamese_model(IMG_SHAPE):
     ''' Build a siamese vgg7 model that computes the distance between two images '''
-    embedding_model = build_embedding_model(IMG_SHAPE)
+    embedding_model = build_vgg7_embedding_model(IMG_SHAPE)
     imgA = Input(shape=IMG_SHAPE)
     imgB = Input(shape=IMG_SHAPE)
     featsA = embedding_model(imgA)
