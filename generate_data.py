@@ -230,28 +230,31 @@ if __name__ == "__main__":
         speaker_spectograms = utils.load(spectogram_path)
     
     ### Generate or contrastive pairs ###
-    if not os.path.isfile(pairs_path):
-        logging.info("Generating pairs for contrastive loss...")
-        pairs, labels = make_contrastive_pairs(
-            speaker_spectograms, 
-            PARAMS.DATA_GENERATOR.N_SAMPLES
-        )
-        utils.save((pairs, labels), pairs_path)
+    if PARAMS.LOSS_TYPE == 'contrastive':
+        if not os.path.isfile(pairs_path):
+            logging.info("Generating pairs for contrastive loss...")
+            pairs, labels = make_contrastive_pairs(
+                speaker_spectograms, 
+                PARAMS.DATA_GENERATOR.N_SAMPLES
+            )
+            utils.save((pairs, labels), pairs_path)
 
     ### Generate or contrastive triplets ###
-    if not os.path.isfile(triplets_path):
-        logging.info("Generating triplets for triplet loss...")
-        triplets = make_contrastive_triplets(
-            speaker_spectograms, 
-            PARAMS.DATA_GENERATOR.N_SAMPLES,
-        )
-        utils.save(triplets, triplets_path)
+    if PARAMS.LOSS_TYPE == 'triplet':
+        if not os.path.isfile(triplets_path):
+            logging.info("Generating triplets for triplet loss...")
+            triplets = make_contrastive_triplets(
+                speaker_spectograms, 
+                PARAMS.DATA_GENERATOR.N_SAMPLES,
+            )
+            utils.save(triplets, triplets_path)
 
     ### Generate or contrastive quadruplets ###
-    if not os.path.isfile(quadruplets_path):
-        logging.info("Generating quadruplets for quadruplet loss...")
-        quadruplets = make_contrastive_quadruplets(
-            speaker_spectograms, 
-            PARAMS.DATA_GENERATOR.N_SAMPLES,
-        )
-        utils.save(quadruplets, quadruplets_path)
+    if PARAMS.LOSS_TYPE == 'quadruplet':
+        if not os.path.isfile(quadruplets_path):
+            logging.info("Generating quadruplets for quadruplet loss...")
+            quadruplets = make_contrastive_quadruplets(
+                speaker_spectograms, 
+                PARAMS.DATA_GENERATOR.N_SAMPLES,
+            )
+            utils.save(quadruplets, quadruplets_path)

@@ -11,16 +11,7 @@ import utils
 
 
 
-
-if __name__ == '__main__':
-    PARAMS = utils.config_init(sys.argv)
-
-    ####  build model  ####
-    IMG_SHAPE = (
-        PARAMS.DATA_GENERATOR.N_MELS,
-        PARAMS.DATA_GENERATOR.MAX_FRAMES,
-        1
-    )
+def run_siamsese_model(IMG_SHAPE, PARAMS):
     model = tf_models.build_siamese_model(IMG_SHAPE)
     (pairs, labels) = utils.load(PARAMS.PATHS.PAIRS_PATH)
 
@@ -53,8 +44,27 @@ if __name__ == '__main__':
     ####  Find EER   ####
     fpr, tpr, threshold = roc_curve(label_test, preds, pos_label=0)
     fnr = 1 - tpr
-    eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
+    #eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
     EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
+
+    return EER
+
+
+if __name__ == '__main__':
+    PARAMS = utils.config_init(sys.argv)
+    IMG_SHAPE = (
+        PARAMS.DATA_GENERATOR.N_MELS,
+        PARAMS.DATA_GENERATOR.MAX_FRAMES,
+        1
+    )
+
+    ####  build model  ####
+    if PARAMS.LOSS_TYPE == 'contrastive':
+        EER = run_siamsese_model(IMG_SHAPE, PARAMS)
+    if PARAMS.LOSS_TYPE == 'triplet':
+        EER = None
+    if PARAMS.LOSS_TYPE == 'quadruplet':
+        EER = None
 
     print('#'*80)
     print('<<<<<  The EER is:  {EER} !  >>>>>'.format(EER=EER))

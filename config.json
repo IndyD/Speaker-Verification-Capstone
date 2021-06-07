@@ -9,6 +9,7 @@
         "QUADRUPLETS_PATH": "test_data/output/contrastive_quadplets.pkl"
     },
     "TRAINING": {
+        "LOSS_TYPE":"contrastive",
         "BATCH_SIZE":25,
         "EPOCHS":3
     },
