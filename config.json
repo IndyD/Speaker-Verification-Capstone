@@ -8,7 +8,7 @@
     },
     "TRAINING": {
         "BATCH_SIZE":25,
-        "EPOCHS":10
+        "EPOCHS":3
     },
     "DATA_GENERATOR":{
         "N_MELS":130,

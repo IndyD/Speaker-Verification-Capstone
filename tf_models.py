@@ -6,6 +6,7 @@ from tensorflow.keras.layers import Input, Dense, Dropout, Activation, Flatten, 
 
 import pdb
 
+
 def euclidean_distance(vectors):
     ''' Distance measure used for siamese model '''
     # unpack the vectors into separate lists
@@ -16,20 +17,6 @@ def euclidean_distance(vectors):
     # return the euclidean distance between the vectors
     return K.sqrt(K.maximum(sumSquared, K.epsilon()))
 
-def contrastive_loss(y, preds, margin=1):
-    ''' Contrastive Loss used for siamese model '''
-    # explicitly cast the true class label data type to the predicted
-    # class label data type (otherwise we run the risk of having two
-    # separate data types, causing TensorFlow to error out)
-    y = tf.cast(y, preds.dtype)
-    # calculate the contrastive loss between the true labels and
-    # the predicted labels
-    squaredPreds = K.square(preds)
-    squaredMargin = K.square(K.maximum(margin - preds, 0))
-    loss = K.mean(y * squaredPreds + (1 - y) * squaredMargin)
-    # return the computed contrastive loss to the calling function
-    return loss
-
 def contrastive_loss_with_margin(margin):
     def contrastive_loss(y_true, y_pred):
         
@@ -37,6 +24,7 @@ def contrastive_loss_with_margin(margin):
         margin_square = K.square(K.maximum(margin - y_pred, 0))
         return K.mean(y_true * square_pred + (1 - y_true) * margin_square)
     return contrastive_loss
+
 
 def build_vgg7_embedding_model(IMG_SHAPE):
     ''' 
@@ -56,11 +44,13 @@ def build_vgg7_embedding_model(IMG_SHAPE):
     embedding_model = Sequential(VGG7 + embedding_layers)
     return embedding_model
 
-def build_siamese_vgg7_model(IMG_SHAPE):
+def build_siamese_model(IMG_SHAPE):
     ''' Build a siamese vgg7 model that computes the distance between two images '''
     embedding_model = build_vgg7_embedding_model(IMG_SHAPE)
+    
     imgA = Input(shape=IMG_SHAPE)
     imgB = Input(shape=IMG_SHAPE)
+
     featsA = embedding_model(imgA)
     featsB = embedding_model(imgB)
     
