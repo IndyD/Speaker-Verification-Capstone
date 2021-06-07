@@ -122,13 +122,6 @@ def find_negative_pair(corpus_data):
 
     return speakers, data
 
-def find_random_negative(corpus_data, exclude_list):
-    candidates = [cand for cand in corpus_data if cand not in exclude_list]
-    speaker_id = random.choice(candidates)
-    random_negative = random.choice(corpus_data[speaker_id])
-
-    return random_negative
-
 def make_contrastive_pairs(corpus_data, n_pairs):
     pair_data = []
     pair_labels = []
@@ -137,9 +130,9 @@ def make_contrastive_pairs(corpus_data, n_pairs):
 
     ## keep the data balanced
     if len(positive_pair_locs) < int(n_pairs / 2) and len(positive_pair_locs) > n_pairs:
-        logging.warning("There aren't enough postive examples to keep the experiment balanced! Consider decreasing N_PAIRS!")
+        logging.warning("There aren't enough postive examples to keep the experiment balanced! Consider decreasing N_SAMPLES!")
     if n_pairs > len(positive_pair_locs):
-        raise ValueError('Choosing an N_PAIRS that is higher than possible with the data! Choose a smaller value!')
+        raise ValueError('Choosing an N_SAMPLES that is higher than possible with the data! Choose a smaller value!')
 
     if len(positive_pair_locs) > int(n_pairs / 2):
         positive_pair_locs = positive_pair_locs[0:int(n_pairs / 2)]        
@@ -161,24 +154,60 @@ def make_contrastive_pairs(corpus_data, n_pairs):
 
     return pair_data, pair_labels
 
+def find_random_negative(corpus_data, exclude):
+    candidates = [cand for cand in corpus_data if cand != exclude]
+    speaker_id = random.choice(candidates)
+    random_negative = random.choice(corpus_data[speaker_id])
+
+    return random_negative
 
 def make_contrastive_triplets(corpus_data, n_triplets):
     triplets = []
     positive_pair_locs = find_positive_pairs(corpus_data)
 
     if n_triplets > len(positive_pair_locs):
-        raise ValueError('Choosing an N_TRIPLETS that is higher than possible with the data! Choose a smaller value!')
-    for i in n_triplets:
+        raise ValueError('Choosing an N_SAMPLES that is higher than possible with the data! Choose a smaller value!')
+    for i in range(n_triplets):
         spkr = positive_pair_locs[i][0]
-        idx_a = positive_pair_locs[i][1]
-        idx_b = positive_pair_locs[i][2]
+        idx1 = positive_pair_locs[i][1]
+        idx2 = positive_pair_locs[i][2]
 
-        negative = find_random_negative(corpus_data, [spkr])
-        triplet = (corpus_data[spkr][idx_a], corpus_data[spkr][idx_b], negative)
+        negative = find_random_negative(corpus_data, spkr)
+        triplet = (corpus_data[spkr][idx1], corpus_data[spkr][idx2], negative)
         triplets.append(triplet)
 
     return triplets
 
+def find_two_random_negatives(corpus_data, exclude):
+    candidates = [cand for cand in corpus_data if cand != exclude]
+    speaker_ids = random.sample(candidates, 2)
+    random_negativeA = random.choice(corpus_data[speaker_ids[0]])
+    random_negativeB = random.choice(corpus_data[speaker_ids[1]])
+
+    return random_negativeA, random_negativeB
+
+def make_contrastive_quadruplets(corpus_data, n_quadruplets):
+    quadruplets = []
+    positive_pair_locs = find_positive_pairs(corpus_data)
+
+    if n_quadruplets > len(positive_pair_locs):
+        raise ValueError('Choosing an N_SAMPLES that is higher than possible with the data! Choose a smaller value!')
+    for i in range(n_quadruplets):
+        spkr = positive_pair_locs[i][0]
+        idx1 = positive_pair_locs[i][1]
+        idx2 = positive_pair_locs[i][2]
+
+        negativeA, negativeB = find_two_random_negatives(corpus_data, spkr)
+
+        quadruplet = (
+            corpus_data[spkr][idx1], 
+            corpus_data[spkr][idx2], 
+            negativeA,
+            negativeB
+        )
+        quadruplets.append(quadruplet)
+
+    return quadruplets
 
 
 if __name__ == "__main__":
@@ -189,8 +218,7 @@ if __name__ == "__main__":
     spectogram_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.SPECT_PATH)
     pairs_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.PAIRS_PATH)
     triplets_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.TRIPLETS_PATH)
-
-    pdb.set_trace()
+    quadruplets_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.QUADRUPLETS_PATH)
 
 
     ### Generate or load spectograms ###
@@ -206,15 +234,24 @@ if __name__ == "__main__":
         logging.info("Generating pairs for contrastive loss...")
         pairs, labels = make_contrastive_pairs(
             speaker_spectograms, 
-            PARAMS.DATA_GENERATOR.N_PAIRS
+            PARAMS.DATA_GENERATOR.N_SAMPLES
         )
         utils.save((pairs, labels), pairs_path)
 
-    ### Generate or contrastive pairs ###
+    ### Generate or contrastive triplets ###
     if not os.path.isfile(triplets_path):
         logging.info("Generating triplets for triplet loss...")
         triplets = make_contrastive_triplets(
             speaker_spectograms, 
-            PARAMS.DATA_GENERATOR.N_TRIPLETS,
+            PARAMS.DATA_GENERATOR.N_SAMPLES,
         )
         utils.save(triplets, triplets_path)
+
+    ### Generate or contrastive quadruplets ###
+    if not os.path.isfile(quadruplets_path):
+        logging.info("Generating quadruplets for quadruplet loss...")
+        quadruplets = make_contrastive_quadruplets(
+            speaker_spectograms, 
+            PARAMS.DATA_GENERATOR.N_SAMPLES,
+        )
+        utils.save(quadruplets, quadruplets_path)
