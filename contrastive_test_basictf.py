@@ -1,6 +1,7 @@
 import tensorflow as tf
 import tensorflow.keras.backend as K
 import numpy as np
+from sklearn.metrics import roc_curve
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Input, Dense, Dropout, Activation, Flatten, Lambda, Conv2D, MaxPooling2D
@@ -10,17 +11,6 @@ import pdb
 import utils
 import sys
 
-
-'''
-def make_dummy_data():
-    X1 = tf.data.Dataset.from_tensor_slices(tf.random.uniform([100, 50], maxval=1000, dtype=tf.int32))
-    X2 = tf.data.Dataset.from_tensor_slices(tf.random.uniform([100, 1], dtype=tf.float32))
-    X = tf.data.Dataset.zip((X1, X2)).map(lambda x1, x2: {'x1': x1, 'x2': x2})
-    y_true = tf.data.Dataset.from_tensor_slices(tf.random.uniform([100, 1], dtype=tf.float32))
-    return X, y_true
-
-pdb.set_trace()
-'''
 
 
 PARAMS = utils.config_init(sys.argv)
@@ -111,15 +101,24 @@ pairs_test_r = np.array([pair[1] for pair in pairs_test])
 label_train = tf.cast(np.array(label_train), tf.float32)
 label_test = tf.cast(np.array(label_test), tf.float32)
 
-#pdb.set_trace()
-#model.compile(loss=siamese_model.contrastive_loss, optimizer="adam")
 model.compile(loss=contrastive_loss_with_margin(margin=1), optimizer="adam")
 print("Training model...")
-pdb.set_trace()
+
 history = model.fit(
     [pairs_train_l, pairs_train_r], label_train,
     validation_data=([pairs_test_l, pairs_test_r], label_test),
     epochs=PARAMS.TRAINING.EPOCHS,
     verbose=1,
     )
-pdb.set_trace()
+
+
+dist = model.predict([pairs_test_l, pairs_test_r])
+preds = np.clip(dist, 0, 1)
+
+fpr, tpr, threshold = roc_curve(label_test, preds, pos_label=1)
+fnr = 1 - tpr
+eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
+
+EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
+
+print('<<<<<  The EER is:  {EER} !  >>>>>'.format(EER=EER))
