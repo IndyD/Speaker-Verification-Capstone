@@ -4,7 +4,8 @@
         "AUDIO_DIR":"test_data/aac/",
         "OUTPUT_DIR":"test_data/output/",
         "SPECT_PATH": "test_data/output/speaker_spectograms.pkl",
-        "PAIRS_PATH": "test_data/output/contrastive_pairs.pkl"
+        "PAIRS_PATH": "test_data/output/contrastive_pairs.pkl",
+        "TRIPLETS_PATH": "test_data/output/contrastive_triplets.pkl"
     },
     "TRAINING": {
         "BATCH_SIZE":25,
@@ -17,6 +18,7 @@
         "WIN_LENGTH":512,
         "MAX_FRAMES":300,
         "N_PAIRS":1000,
+        "N_TRIPLETS":1000,
         "TEST_SPLIT":0.2
     }
   }

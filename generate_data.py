@@ -92,7 +92,8 @@ def generate_spectograms(audio_dir, spectogram_path, params):
     return speaker_spectograms
 
 def find_positive_pairs(corpus_data):
-    """ Find the positions of all possible  """
+    """ Find the positions of all possible positive pairs, 
+    interleaves speakers to maximize diversity """
     positive_pair_locs = []
     unformatted_pair_locs = []
     for speaker, speaker_data in corpus_data.items():
@@ -121,19 +122,33 @@ def find_negative_pair(corpus_data):
 
     return speakers, data
 
+def find_random_negative(corpus_data, exclude_list):
+    candidates = [cand for cand in corpus_data if cand not in exclude_list]
+    speaker_id = random.choice(candidates)
+    random_negative = random.choice(corpus_data[speaker_id])
+
+    return random_negative
+
 def make_contrastive_pairs(corpus_data, n_pairs):
     pair_data = []
     pair_labels = []
     
     positive_pair_locs = find_positive_pairs(corpus_data)
 
+    ## keep the data balanced
+    if len(positive_pair_locs) < int(n_pairs / 2) and len(positive_pair_locs) > n_pairs:
+        logging.warning("There aren't enough postive examples to keep the experiment balanced! Consider decreasing N_PAIRS!")
+    if n_pairs > len(positive_pair_locs):
+        raise ValueError('Choosing an N_PAIRS that is higher than possible with the data! Choose a smaller value!')
+
     if len(positive_pair_locs) > int(n_pairs / 2):
-        positive_pair_locs = positive_pair_locs[0:int(n_pairs / 2)]
-        for loc in positive_pair_locs:
-            pair_data.append(
-                (corpus_data[loc[0]][loc[1]], corpus_data[loc[0]][loc[2]])
-            )
-            pair_labels.append([1])
+        positive_pair_locs = positive_pair_locs[0:int(n_pairs / 2)]        
+
+    for loc in positive_pair_locs:
+        pair_data.append(
+            (corpus_data[loc[0]][loc[1]], corpus_data[loc[0]][loc[2]])
+        )
+        pair_labels.append([1])
     
     ## This ensures the same speaker pairs can't be considered more than twice (reverse is possible)
     neg_speaks = set([])
@@ -146,6 +161,26 @@ def make_contrastive_pairs(corpus_data, n_pairs):
 
     return pair_data, pair_labels
 
+
+def make_contrastive_triplets(corpus_data, n_triplets):
+    triplets = []
+    positive_pair_locs = find_positive_pairs(corpus_data)
+
+    if n_triplets > len(positive_pair_locs):
+        raise ValueError('Choosing an N_TRIPLETS that is higher than possible with the data! Choose a smaller value!')
+    for i in n_triplets:
+        spkr = positive_pair_locs[i][0]
+        idx_a = positive_pair_locs[i][1]
+        idx_b = positive_pair_locs[i][2]
+
+        negative = find_random_negative(corpus_data, [spkr])
+        triplet = (corpus_data[spkr][idx_a], corpus_data[spkr][idx_b], negative)
+        triplets.append(triplet)
+
+    return triplets
+
+
+
 if __name__ == "__main__":
     ### Set variables from config file ###
     PARAMS = utils.config_init(sys.argv)
@@ -153,6 +188,10 @@ if __name__ == "__main__":
     output_dir = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.OUTPUT_DIR)
     spectogram_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.SPECT_PATH)
     pairs_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.PAIRS_PATH)
+    triplets_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.TRIPLETS_PATH)
+
+    pdb.set_trace()
+
 
     ### Generate or load spectograms ###
     if not os.path.isfile(spectogram_path):
@@ -160,7 +199,7 @@ if __name__ == "__main__":
         speaker_spectograms = generate_spectograms(audio_dir, spectogram_path, PARAMS)
         utils.save(speaker_spectograms, spectogram_path)
     else:
-        utils.load(spectogram_path)
+        speaker_spectograms = utils.load(spectogram_path)
     
     ### Generate or contrastive pairs ###
     if not os.path.isfile(pairs_path):
@@ -171,3 +210,11 @@ if __name__ == "__main__":
         )
         utils.save((pairs, labels), pairs_path)
 
+    ### Generate or contrastive pairs ###
+    if not os.path.isfile(triplets_path):
+        logging.info("Generating triplets for triplet loss...")
+        triplets = make_contrastive_triplets(
+            speaker_spectograms, 
+            PARAMS.DATA_GENERATOR.N_TRIPLETS,
+        )
+        utils.save(triplets, triplets_path)
