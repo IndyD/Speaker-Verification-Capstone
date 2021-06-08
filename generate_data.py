@@ -73,8 +73,11 @@ def generate_spectograms(audio_dir, spectogram_path, params):
     speaker_spectograms = defaultdict(list)
 
     speaker_dirs = listdir_no_hidden(audio_dir)
-    for speaker in speaker_dirs:
-        logging.info('Generating spectograms for speaker: {sp}'.format(sp=speaker))
+    for i, speaker in enumerate(speaker_dirs):
+        if i % 50 == 25:
+            logging.info('{i} of {n} speakers complete...'.format(i=i, n=len(speaker_dirs)))
+
+        logging.debug('Generating spectograms for speaker: {sp}'.format(sp=speaker))
         speaker_dir = os.path.join(audio_dir, speaker)
         speech_session_dirs = listdir_no_hidden(speaker_dir)
 
@@ -215,14 +218,15 @@ if __name__ == "__main__":
     PARAMS = utils.config_init(sys.argv)
     audio_dir = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.AUDIO_DIR)
     output_dir = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.OUTPUT_DIR)
-    spectogram_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.SPECT_PATH)
-    pairs_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.PAIRS_PATH)
-    triplets_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.TRIPLETS_PATH)
-    quadruplets_path = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.QUADRUPLETS_PATH)
-
+    spectogram_path = os.path.join(output_dir, 'speaker_spectograms.pkl')
+    pairs_path = os.path.join(output_dir, 'contrastive_pairs.pkl')
+    triplets_path = os.path.join(output_dir, 'contrastive_triplets.pkl')
+    quadruplets_path = os.path.join(output_dir, 'contrastive_quadplets.pkl')
+    overwrite_spect = PARAMS.DATA_GENERATOR.OVERWRITE_SPECT
+    overwrite_datasets = PARAMS.DATA_GENERATOR.OVERWRITE_DATASETS
 
     ### Generate or load spectograms ###
-    if not os.path.isfile(spectogram_path):
+    if overwrite_spect == 'T' or not os.path.isfile(spectogram_path):
         logging.info("Generating spectograms...")
         speaker_spectograms = generate_spectograms(audio_dir, spectogram_path, PARAMS)
         utils.save(speaker_spectograms, spectogram_path)
@@ -230,8 +234,8 @@ if __name__ == "__main__":
         speaker_spectograms = utils.load(spectogram_path)
     
     ### Generate or contrastive pairs ###
-    if PARAMS.LOSS_TYPE == 'contrastive':
-        if not os.path.isfile(pairs_path):
+    if PARAMS.TRAINING.LOSS_TYPE == 'contrastive':
+        if overwrite_datasets == 'T' or not os.path.isfile(pairs_path):
             logging.info("Generating pairs for contrastive loss...")
             pairs, labels = make_contrastive_pairs(
                 speaker_spectograms, 
@@ -240,8 +244,8 @@ if __name__ == "__main__":
             utils.save((pairs, labels), pairs_path)
 
     ### Generate or contrastive triplets ###
-    if PARAMS.LOSS_TYPE == 'triplet':
-        if not os.path.isfile(triplets_path):
+    if PARAMS.TRAINING.LOSS_TYPE == 'triplet':
+        if overwrite_datasets == 'T' or not os.path.isfile(triplets_path):
             logging.info("Generating triplets for triplet loss...")
             triplets = make_contrastive_triplets(
                 speaker_spectograms, 
@@ -250,8 +254,8 @@ if __name__ == "__main__":
             utils.save(triplets, triplets_path)
 
     ### Generate or contrastive quadruplets ###
-    if PARAMS.LOSS_TYPE == 'quadruplet':
-        if not os.path.isfile(quadruplets_path):
+    if PARAMS.TRAINING.LOSS_TYPE == 'quadruplet':
+        if overwrite_datasets == 'T' or not os.path.isfile(quadruplets_path):
             logging.info("Generating quadruplets for quadruplet loss...")
             quadruplets = make_contrastive_quadruplets(
                 speaker_spectograms, 

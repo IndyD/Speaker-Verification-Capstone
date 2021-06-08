@@ -2,11 +2,7 @@
     "PATHS":{
         "BASE_DIR":"/Users/indy/Documents/MSDS/git/Speaker-Verification-Capstone/",
         "AUDIO_DIR":"test_data/aac/",
-        "OUTPUT_DIR":"test_data/output/",
-        "SPECT_PATH": "test_data/output/speaker_spectograms.pkl",
-        "PAIRS_PATH": "test_data/output/contrastive_pairs.pkl",
-        "TRIPLETS_PATH": "test_data/output/contrastive_triplets.pkl",
-        "QUADRUPLETS_PATH": "test_data/output/contrastive_quadplets.pkl"
+        "OUTPUT_DIR":"output/"
     },
     "TRAINING": {
         "LOSS_TYPE":"contrastive",
@@ -14,6 +10,8 @@
         "EPOCHS":3
     },
     "DATA_GENERATOR":{
+        "OVERWRITE_SPECT":"T",
+        "OVERWRITE_DATASETS":"T",
         "N_MELS":130,
         "N_FFT":512,
         "HOP_LENGTH":222,

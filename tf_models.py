@@ -57,3 +57,18 @@ def build_siamese_model(IMG_SHAPE):
     distance = Lambda(euclidean_distance)([featsA, featsB])
     siamese_vgg7_model = Model(inputs=[imgA, imgB], outputs=distance)
     return siamese_vgg7_model
+
+
+def build_triplet_model(IMG_SHAPE):
+    ''' Build a triplet vgg7 model that computes the distance between
+    an anchor image, a positive image, and a negative image '''
+    embedding_model = build_vgg7_embedding_model(IMG_SHAPE)
+    
+    anchor_img = Input(shape=IMG_SHAPE)
+    pos_img = Input(shape=IMG_SHAPE)
+    neg_img = Input(shape=IMG_SHAPE)
+
+    feats_anch = embedding_model(anchor_img)
+    feats_pos = embedding_model(pos_img)
+    feats_neg = embedding_model(neg_img)
+    

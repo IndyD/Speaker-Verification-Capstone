@@ -1,5 +1,7 @@
 import pickle
+import pprint
 import sys
+import os
 import pdb
 import tensorflow as tf
 import numpy as np
@@ -8,12 +10,16 @@ from sklearn.metrics import roc_curve
 
 import tf_models
 import utils
+import logging
 
+logging.basicConfig(level=logging.INFO)
 
 
 def run_siamsese_model(IMG_SHAPE, PARAMS):
     model = tf_models.build_siamese_model(IMG_SHAPE)
-    (pairs, labels) = utils.load(PARAMS.PATHS.PAIRS_PATH)
+    (pairs, labels) = utils.load(
+        os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.OUTPUT_DIR, 'contrastive_pairs.pkl')
+    )
 
     pairs_train, pairs_test, label_train, label_test = train_test_split(
         pairs, labels, test_size=PARAMS.DATA_GENERATOR.TEST_SPLIT, random_state=123
@@ -29,7 +35,7 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
 
     ####  compile and fit model  ####
     model.compile(loss=tf_models.contrastive_loss_with_margin(margin=1), optimizer="adam")
-    print("Training model...")
+    logging.info("Training model...")
 
     history = model.fit(
         [pairs_train_l, pairs_train_r], label_train,
@@ -59,13 +65,16 @@ if __name__ == '__main__':
     )
 
     ####  build model  ####
-    if PARAMS.LOSS_TYPE == 'contrastive':
+    if PARAMS.TRAINING.LOSS_TYPE == 'contrastive':
         EER = run_siamsese_model(IMG_SHAPE, PARAMS)
-    if PARAMS.LOSS_TYPE == 'triplet':
+    if PARAMS.TRAINING.LOSS_TYPE == 'triplet':
         EER = None
-    if PARAMS.LOSS_TYPE == 'quadruplet':
+    if PARAMS.TRAINING.LOSS_TYPE == 'quadruplet':
         EER = None
 
     print('#'*80)
+    print('Config parameters:')
+    pprint.pprint(PARAMS)
+    print('-'*60)
     print('<<<<<  The EER is:  {EER} !  >>>>>'.format(EER=EER))
     print('#'*80)
