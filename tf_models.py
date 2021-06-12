@@ -2,7 +2,7 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 import numpy as np
 from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import Input, Dense, Dropout, Activation, Flatten, Lambda
+from tensorflow.keras.layers import Input, Dense, Dropout, Activation, Flatten, Lambda, Layer
 
 import pdb
 
@@ -24,6 +24,23 @@ def contrastive_loss_with_margin(margin):
         margin_square = K.square(K.maximum(margin - y_pred, 0))
         return K.mean(y_true * square_pred + (1 - y_true) * margin_square)
     return contrastive_loss
+
+
+class TripletLossLayer(Layer):
+    def __init__(self, margin, **kwargs):
+        self.margin = margin
+        super(TripletLossLayer, self).__init__(**kwargs)
+    
+    def triplet_loss(self, inputs):
+        anchor, positive, negative = inputs
+        p_dist = K.sum(K.square(anchor-positive), axis=-1)
+        n_dist = K.sum(K.square(anchor-negative), axis=-1)
+        return K.sum(K.maximum(p_dist - n_dist + self.margin, 0), axis=0)
+    
+    def call(self, inputs):
+        loss = self.triplet_loss(inputs)
+        self.add_loss(loss)
+        return loss
 
 
 def build_vgg7_embedding_model(IMG_SHAPE):
@@ -59,16 +76,24 @@ def build_siamese_model(IMG_SHAPE):
     return siamese_vgg7_model
 
 
-def build_triplet_model(IMG_SHAPE):
+def build_triplet_model(IMG_SHAPE, PARAMS):
     ''' Build a triplet vgg7 model that computes the distance between
     an anchor image, a positive image, and a negative image '''
-    embedding_model = build_vgg7_embedding_model(IMG_SHAPE)
+    triplet_encoding_model = build_vgg7_embedding_model(IMG_SHAPE)
+    triplet_encoding_model.add(Lambda(lambda x: K.l2_normalize(x,axis=-1)))
     
-    anchor_img = Input(shape=IMG_SHAPE)
-    pos_img = Input(shape=IMG_SHAPE)
-    neg_img = Input(shape=IMG_SHAPE)
-
-    feats_anch = embedding_model(anchor_img)
-    feats_pos = embedding_model(pos_img)
-    feats_neg = embedding_model(neg_img)
+    anchor_input = Input(IMG_SHAPE, name="anchor_input")
+    positive_input = Input(IMG_SHAPE, name="positive_input")
+    negative_input = Input(IMG_SHAPE, name="negative_input") 
     
+    # Generate the encodings (feature vectors) for the three images
+    encoded_a = triplet_encoding_model(anchor_input)
+    encoded_p = triplet_encoding_model(positive_input)
+    encoded_n = triplet_encoding_model(negative_input)
+    
+    #TripletLoss Layer
+    loss_layer = TripletLossLayer(margin=PARAMS.TRAINING.MARGIN,name='triplet_loss_layer')([encoded_a,encoded_p,encoded_n])
+    
+    # Connect the inputs with the outputs
+    triplet_model = Model(inputs=[anchor_input,positive_input,negative_input],outputs=loss_layer)
+    return triplet_model

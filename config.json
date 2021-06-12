@@ -5,13 +5,14 @@
         "OUTPUT_DIR":"output/"
     },
     "TRAINING": {
-        "LOSS_TYPE":"contrastive",
+        "LOSS_TYPE":"triplet",
+        "MARGIN":1,
         "BATCH_SIZE":25,
-        "EPOCHS":3
+        "EPOCHS":10
     },
     "DATA_GENERATOR":{
-        "OVERWRITE_SPECT":"T",
-        "OVERWRITE_DATASETS":"T",
+        "OVERWRITE_SPECT":"F",
+        "OVERWRITE_DATASETS":"F",
         "N_MELS":130,
         "N_FFT":512,
         "HOP_LENGTH":222,
