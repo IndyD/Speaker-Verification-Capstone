@@ -18,6 +18,28 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 
+
+def compute_labelled_distances(embedding_layers, test_a, test_p, test_n, IMG_SHAPE):
+    img_input = Input(IMG_SHAPE)
+    emb_model = Sequential([Input(IMG_SHAPE)] + embedding_layers.layers)
+    trained_embedding_model = Model(inputs=img_input, outputs=emb_model(img_input))
+    
+    embeddings_a = trained_embedding_model.predict(test_a)
+    embeddings_p = trained_embedding_model.predict(test_p)
+    embeddings_n = trained_embedding_model.predict(test_n)
+
+    pos_pairs = zip(embeddings_a, embeddings_p)
+    dist_p = [np.linalg.norm(emb[0] - emb[1]) for emb in pos_pairs]
+
+    neg_pairs = zip(embeddings_a, embeddings_n)
+    dist_n = [np.linalg.norm(emb[0] - emb[1]) for emb in neg_pairs]
+
+    dist = np.array(dist_p + dist_n)
+    labels = np.concatenate((np.ones(len(dist_p)), np.zeros(len(dist_n))))
+
+    return dist, labels
+
+
 def run_siamsese_model(IMG_SHAPE, PARAMS):
     model = tf_models.build_siamese_model(IMG_SHAPE)
     (pairs, labels) = utils.load(
@@ -37,7 +59,7 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
     labels_test = tf.cast(np.array(labels_test), tf.float32)
 
     ####  compile and fit model  ####
-    model.compile(loss=tf_models.contrastive_loss_with_margin(margin=PARAMS.TRAINING.MARGIN), optimizer="adam")
+    model.compile(loss=tf_models.contrastive_loss_with_margin(margin=PARAMS.TRAINING.MARGIN), optimizer=PARAMS.TRAINING.OPTIMIZER)
     logging.info("Training contrastive pair model...")
 
     history = model.fit(
@@ -72,7 +94,7 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
     test_n = np.array([triplet[2] / -80.0 for triplet in triplets_test])
 
     ####  compile and fit model  ####
-    model.compile(optimizer="adam")
+    model.compile(optimizer=PARAMS.TRAINING.OPTIMIZER)
     logging.info("Training tripet loss model...")
 
     history = model.fit(
@@ -82,29 +104,54 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
         verbose=1,
     )
 
-    pdb.set_trace()
-
     ####  Transfer learning- take embedding layers and score pairs similarly to contrastive loss
-
     embedding_layers = model.layers[3]
-    img_input = Input(IMG_SHAPE)
-    emb_model = Sequential([Input(IMG_SHAPE)] + embedding_layers.layers)
-    trained_embedding_model = Model(inputs=img_input, outputs=emb_model(img_input))
-    
-    embeddings_a = trained_embedding_model.predict(test_a)
-    embeddings_p = trained_embedding_model.predict(test_p)
-    embeddings_n = trained_embedding_model.predict(test_n)
-
-    pos_pairs = zip(embeddings_a, embeddings_p)
-    dist_p = [np.linalg.norm(emb[0] - emb[1]) for emb in pos_pairs]
-
-    neg_pairs = zip(embeddings_a, embeddings_n)
-    dist_n = [np.linalg.norm(emb[0] - emb[1]) for emb in neg_pairs]
-
-    dist_test = np.array(dist_p + dist_n)
-    labels_test = np.concatenate((np.ones(len(dist_p)), np.zeros(len(dist_n))))
+    dist_test, labels_test = compute_labelled_distances(embedding_layers, test_a, test_p, test_n, IMG_SHAPE)
 
     return dist_test, labels_test
+
+
+
+def run_quadruplet_model(IMG_SHAPE, PARAMS):
+    model = tf_models.build_quadruplet_model(IMG_SHAPE, PARAMS)
+    quadruplets = utils.load(
+        os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.OUTPUT_DIR, 'contrastive_quadruplets.pkl')
+    )
+
+    quadruplets_train = quadruplets[int(len(quadruplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT):]
+    quadruplets_test = quadruplets[:int(len(quadruplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)]
+
+    ####  split and normalize the spectograms  ####
+    train_a = np.array([quadruplet[0] / -80.0 for quadruplet in quadruplets_train])
+    train_p = np.array([quadruplet[1] / -80.0 for quadruplet in quadruplets_train])
+    train_n1 = np.array([quadruplet[2] / -80.0 for quadruplet in quadruplets_train])
+    train_n2 = np.array([quadruplet[3] / -80.0 for quadruplet in quadruplets_train])
+
+    test_a = np.array([quadruplet[0] / -80.0 for quadruplet in quadruplets_test])
+    test_p = np.array([quadruplet[1] / -80.0 for quadruplet in quadruplets_test])
+    test_n1 = np.array([quadruplet[2] / -80.0 for quadruplet in quadruplets_test])
+    test_n2 = np.array([quadruplet[3] / -80.0 for quadruplet in quadruplets_test])
+
+    ####  compile and fit model  ####
+    model.compile(optimizer=PARAMS.TRAINING.OPTIMIZER)
+    logging.info("Training tripet loss model...")
+
+    history = model.fit(
+        [train_a, train_p, train_n1, train_n2],
+        validation_data=([test_a, test_p, test_n1, test_n2]),
+        epochs=PARAMS.TRAINING.EPOCHS,
+        verbose=1,
+    )
+
+    ####  Transfer learning- take embedding layers and score pairs similarly to contrastive loss
+    embedding_layers = model.layers[4]
+    dist_test, labels_test = compute_labelled_distances(embedding_layers, test_a, test_p, test_n1, IMG_SHAPE)
+
+    return dist_test, labels_test
+
+
+
+
 
 
 if __name__ == '__main__':
@@ -121,8 +168,7 @@ if __name__ == '__main__':
     if PARAMS.TRAINING.LOSS_TYPE == 'triplet':
         dist_test, labels_test = run_triplet_model(IMG_SHAPE, PARAMS)
     if PARAMS.TRAINING.LOSS_TYPE == 'quadruplet':
-        dist_test = None
-        labels_test = None
+        dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS)
 
     ## scale the distances to compute EERs
     preds = dist_test / dist_test.max()

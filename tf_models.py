@@ -42,6 +42,23 @@ class TripletLossLayer(Layer):
         self.add_loss(loss)
         return loss
 
+class QuadrupletLossLayer(Layer):
+    def __init__(self, margin, **kwargs):
+        self.margin = margin
+        super(QuadrupletLossLayer, self).__init__(**kwargs)
+    
+    def quadruplet_loss(self, inputs):
+        anchor, positive, negative1, negative2 = inputs
+        p_dist = K.sum(K.square(anchor-positive), axis=-1)
+        n1_dist = K.sum(K.square(anchor-negative1), axis=-1)
+        n2_dist = K.sum(K.square(anchor-negative2), axis=-1)
+        return K.sum(K.maximum(p_dist - n1_dist + self.margin, 0), axis=0) + K.sum(K.maximum(p_dist - n2_dist + self.margin, 0), axis=0)
+    
+    def call(self, inputs):
+        loss = self.quadruplet_loss(inputs)
+        self.add_loss(loss)
+        return loss
+
 
 def build_vgg7_embedding_model(IMG_SHAPE):
     ''' 
@@ -92,8 +109,33 @@ def build_triplet_model(IMG_SHAPE, PARAMS):
     encoded_n = triplet_encoding_model(negative_input)
     
     #TripletLoss Layer
-    loss_layer = TripletLossLayer(margin=PARAMS.TRAINING.MARGIN,name='triplet_loss_layer')([encoded_a,encoded_p,encoded_n])
+    loss_layer = TripletLossLayer(margin=PARAMS.TRAINING.MARGIN,name='triplet_loss_layer')([encoded_a, encoded_p, encoded_n])
     
     # Connect the inputs with the outputs
     triplet_model = Model(inputs=[anchor_input,positive_input,negative_input],outputs=loss_layer)
     return triplet_model
+
+def build_quadruplet_model(IMG_SHAPE, PARAMS):
+    ''' Build a quadruplet vgg7 model that computes the distance between
+    an anchor image, a positive image, and two dissimilar negative images '''
+    quadruplet_encoding_model = build_vgg7_embedding_model(IMG_SHAPE)
+    quadruplet_encoding_model.add(Lambda(lambda x: K.l2_normalize(x,axis=-1)))
+    
+    anchor_input = Input(IMG_SHAPE, name="anchor_input")
+    positive_input = Input(IMG_SHAPE, name="positive_input")
+    negative_input1 = Input(IMG_SHAPE, name="negative_input1") 
+    negative_input2 = Input(IMG_SHAPE, name="negative_input2") 
+
+    
+    # Generate the encodings (feature vectors) for the three images
+    encoded_a = quadruplet_encoding_model(anchor_input)
+    encoded_p = quadruplet_encoding_model(positive_input)
+    encoded_n1 = quadruplet_encoding_model(negative_input1)
+    encoded_n2 = quadruplet_encoding_model(negative_input2)
+    
+    #QuadrupletLoss Layer
+    loss_layer = QuadrupletLossLayer(margin=PARAMS.TRAINING.MARGIN,name='quadruplet_loss_layer')([encoded_a, encoded_p, encoded_n1, encoded_n2])
+    
+    # Connect the inputs with the outputs
+    quadruplet_model = Model(inputs=[anchor_input, positive_input, negative_input1, negative_input2],outputs=loss_layer)
+    return quadruplet_model

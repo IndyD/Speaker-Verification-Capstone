@@ -221,7 +221,7 @@ if __name__ == "__main__":
     spectogram_path = os.path.join(output_dir, 'speaker_spectograms.pkl')
     pairs_path = os.path.join(output_dir, 'contrastive_pairs.pkl')
     triplets_path = os.path.join(output_dir, 'contrastive_triplets.pkl')
-    quadruplets_path = os.path.join(output_dir, 'contrastive_quadplets.pkl')
+    quadruplets_path = os.path.join(output_dir, 'contrastive_quadruplets.pkl')
     overwrite_spect = PARAMS.DATA_GENERATOR.OVERWRITE_SPECT
     overwrite_datasets = PARAMS.DATA_GENERATOR.OVERWRITE_DATASETS
 

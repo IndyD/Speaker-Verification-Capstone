@@ -5,10 +5,11 @@
         "OUTPUT_DIR":"output/"
     },
     "TRAINING": {
-        "LOSS_TYPE":"triplet",
+        "LOSS_TYPE":"quadruplet",
         "MARGIN":1,
         "BATCH_SIZE":25,
-        "EPOCHS":10
+        "EPOCHS":5,
+        "OPTIMIZER":"adam"
     },
     "DATA_GENERATOR":{
         "OVERWRITE_SPECT":"F",
