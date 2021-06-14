@@ -6,7 +6,7 @@
         "LOSS_TYPE":"triplet",
         "MARGIN":1,
         "BATCH_SIZE":25,
-        "EPOCHS":3,
+        "EPOCHS":5,
         "OPTIMIZER":"adam",
         "SEMIHARD_FERSH_MODEL":"F"
     },

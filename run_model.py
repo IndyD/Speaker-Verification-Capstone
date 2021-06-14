@@ -18,7 +18,15 @@ import utils
 
 import pdb
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
+
+def calculate_EER(dist, labels):
+    # scale distances so EER works
+    preds = dist / dist.max()
+    fpr, tpr, _ = roc_curve(labels, preds, pos_label=0)
+    fnr = 1 - tpr
+    EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
+    return EER
 
 def transfer_embedding_layers(embedding_layers, IMG_SHAPE):
     img_input = Input(IMG_SHAPE)
@@ -57,8 +65,9 @@ def mine_triplets(embedding_model, PARAMS):
     i = PARAMS.DATA_GENERATOR.N_SAMPLES
 
     ## keep going down the list and adding the semi-hard triplets
-    while len(semihard_triplets) < i:
+    while len(semihard_triplets) < PARAMS.DATA_GENERATOR.N_SAMPLES:
         spkr = positive_pair_locs[i][0]
+        print("Considering {s}...".format(s=spkr))
         idx1 = positive_pair_locs[i][1]
         idx2 = positive_pair_locs[i][2]
 
@@ -71,6 +80,7 @@ def mine_triplets(embedding_model, PARAMS):
         dist_p, dist_n = compute_contrastive_embeddings(embedding_model, input_a, input_p, input_n)
 
         if (dist_p[0] < dist_n[0]) and (dist_n[0] < dist_p[0] + PARAMS.TRAINING.MARGIN):
+            print("Added {s}".format(s=spkr))
             semihard_triplets.append(cand_triplet)
         i += 1
     return semihard_triplets
@@ -151,10 +161,19 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
     )
 
     logging.info("Training tripet loss model on all triplets...")
-    model, triplets_test_full = train_triplet_model(model, triplets, PARAMS)
+    model, triplets_test = train_triplet_model(model, triplets, PARAMS)
     embedding_layers = model.layers[3]
     embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
 
+    #### Calculate initial EER
+    test_a = np.array([triplet[0] for triplet in triplets_test])
+    test_p = np.array([triplet[1] for triplet in triplets_test])
+    test_n = np.array([triplet[2] for triplet in triplets_test])
+
+    ####  Transfer learning- take inital embedding layers and score pairs similarly to contrastive loss
+    dist_test_initial, labels_test_initial = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
+    initial_EER = calculate_EER(dist_test_initial, labels_test_initial)
+    logging.info("<<<< Initial EER: {EER} >>>>...".format(EER=initial_EER))
 
     #### Triplet mining
     logging.info("Mining semi-hard triplets...")
@@ -167,11 +186,7 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
     else:
         model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
 
-    test_a = np.array([triplet[0] for triplet in triplets_test_full])
-    test_p = np.array([triplet[1] for triplet in triplets_test_full])
-    test_n = np.array([triplet[2] for triplet in triplets_test_full])
-
-    ####  Transfer learning- take embedding layers and score pairs similarly to contrastive loss
+    ####  Transfer learning- take final embedding layers and score pairs similarly to contrastive loss
     dist_test, labels_test = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
 
     return dist_test, labels_test
@@ -237,15 +252,8 @@ if __name__ == '__main__':
     if PARAMS.TRAINING.LOSS_TYPE == 'quadruplet':
         dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS)
 
-    ## scale the distances to compute EERs
-    preds = dist_test / dist_test.max()
-
     ####  Find EER   ####
-    fpr, tpr, threshold = roc_curve(labels_test, preds, pos_label=0)
-    fnr = 1 - tpr
-    #eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
-    EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
-
+    EER = calculate_EER(dist_test, labels_test)
 
     print('#'*80)
     print('Config parameters:')
