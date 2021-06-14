@@ -1,8 +1,9 @@
+import logging
+import os
 import pickle
 import pprint
+import random 
 import sys
-import os
-import pdb
 import tensorflow as tf
 import numpy as np
 
@@ -11,28 +12,36 @@ from sklearn.metrics import roc_curve
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Input
 
+import generate_data
 import tf_models
 import utils
-import logging
+
+import pdb
 
 logging.basicConfig(level=logging.INFO)
 
-
-
-def compute_labelled_distances(embedding_layers, test_a, test_p, test_n, IMG_SHAPE):
+def transfer_embedding_layers(embedding_layers, IMG_SHAPE):
     img_input = Input(IMG_SHAPE)
     emb_model = Sequential([Input(IMG_SHAPE)] + embedding_layers.layers)
     trained_embedding_model = Model(inputs=img_input, outputs=emb_model(img_input))
-    
-    embeddings_a = trained_embedding_model.predict(test_a)
-    embeddings_p = trained_embedding_model.predict(test_p)
-    embeddings_n = trained_embedding_model.predict(test_n)
+    return trained_embedding_model
+
+def compute_contrastive_embeddings(embedding_model, anchors, positives, negatives):
+    embeddings_a = embedding_model.predict(anchors)
+    embeddings_p = embedding_model.predict(positives)
+    embeddings_n = embedding_model.predict(negatives)
 
     pos_pairs = zip(embeddings_a, embeddings_p)
     dist_p = [np.linalg.norm(emb[0] - emb[1]) for emb in pos_pairs]
 
     neg_pairs = zip(embeddings_a, embeddings_n)
     dist_n = [np.linalg.norm(emb[0] - emb[1]) for emb in neg_pairs]
+
+    return dist_p, dist_n
+
+
+def compute_labelled_distances(embedding_model, anchors, positives, negatives):
+    dist_p, dist_n = compute_contrastive_embeddings(embedding_model, anchors, positives, negatives)
 
     dist = np.array(dist_p + dist_n)
     labels = np.concatenate((np.ones(len(dist_p)), np.zeros(len(dist_n))))
@@ -49,14 +58,21 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
     pairs_train, pairs_test, labels_train, labels_test = train_test_split(
         pairs, labels, test_size=PARAMS.DATA_GENERATOR.TEST_SPLIT, random_state=123
     )
+    val_split = (1 / (1.0 - PARAMS.DATA_GENERATOR.TEST_SPLIT)) * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
+    pairs_train, pairs_val, labels_train, labels_val = train_test_split(
+        pairs_train, labels_train, test_size=val_split, random_state=123
+    )
 
     ####  split and normalize the spectograms  ####
-    pairs_train_l = np.array([pair[0] / -80.0 for pair in pairs_train])
-    pairs_train_r = np.array([pair[1] / -80.0 for pair in pairs_train])
-    pairs_test_l = np.array([pair[0] / -80.0 for pair in pairs_test])
-    pairs_test_r = np.array([pair[1] / -80.0 for pair in pairs_test])
+    pairs_train_l = np.array([pair[0] for pair in pairs_train])
+    pairs_train_r = np.array([pair[1] for pair in pairs_train])
+    pairs_test_l = np.array([pair[0] for pair in pairs_test])
+    pairs_test_r = np.array([pair[1] for pair in pairs_test])
+    pairs_val_l = np.array([pair[0] for pair in pairs_val])
+    pairs_val_r = np.array([pair[1] for pair in pairs_val])
     labels_train = tf.cast(np.array(labels_train), tf.float32)
     labels_test = tf.cast(np.array(labels_test), tf.float32)
+    labels_val = tf.cast(np.array(labels_val), tf.float32)
 
     ####  compile and fit model  ####
     model.compile(loss=tf_models.contrastive_loss_with_margin(margin=PARAMS.TRAINING.MARGIN), optimizer=PARAMS.TRAINING.OPTIMIZER)
@@ -64,7 +80,7 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
 
     history = model.fit(
         [pairs_train_l, pairs_train_r], labels_train,
-        validation_data=([pairs_test_l, pairs_test_r], labels_test),
+        validation_data=([pairs_val_l, pairs_val_r], labels_val),
         epochs=PARAMS.TRAINING.EPOCHS,
         verbose=1,
     )
@@ -81,32 +97,81 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
         os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets.pkl')
     )
 
-    triplets_train = triplets[int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT):]
-    triplets_test = triplets[:int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)]
+    def train_triplet_model(model, triplets, PARAMS):
+        ## train-test split
+        random.shuffle(triplets)
+        test_split = int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
+        val_split = test_split + int(len(triplets) * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT)
+        triplets_test = triplets[:test_split]
+        triplets_val = triplets[test_split:val_split]
+        triplets_train = triplets[val_split:]
 
-    ####  split and normalize the spectograms  ####
-    train_a = np.array([triplet[0] / -80.0 for triplet in triplets_train])
-    train_p = np.array([triplet[1] / -80.0 for triplet in triplets_train])
-    train_n = np.array([triplet[2] / -80.0 for triplet in triplets_train])
+        ####  split and normalize the spectograms  ####
+        train_a = np.array([triplet[0] for triplet in triplets_train])
+        train_p = np.array([triplet[1] for triplet in triplets_train])
+        train_n = np.array([triplet[2] for triplet in triplets_train])
 
-    test_a = np.array([triplet[0] / -80.0 for triplet in triplets_test])
-    test_p = np.array([triplet[1] / -80.0 for triplet in triplets_test])
-    test_n = np.array([triplet[2] / -80.0 for triplet in triplets_test])
+        val_a = np.array([triplet[0] for triplet in triplets_val])
+        val_p = np.array([triplet[1] for triplet in triplets_val])
+        val_n = np.array([triplet[2] for triplet in triplets_val])
 
-    ####  compile and fit model  ####
-    model.compile(optimizer=PARAMS.TRAINING.OPTIMIZER)
-    logging.info("Training tripet loss model...")
+        ####  compile and fit model  ####
+        model.compile(optimizer=PARAMS.TRAINING.OPTIMIZER)
+        logging.info("Training tripet loss model...")
 
-    history = model.fit(
-        [train_a, train_p, train_n],
-        validation_data=([test_a, test_p, test_n]),
-        epochs=PARAMS.TRAINING.EPOCHS,
-        verbose=1,
-    )
+        history = model.fit(
+            [train_a, train_p, train_n],
+            validation_data=([val_a, val_p, val_n]),
+            epochs=PARAMS.TRAINING.EPOCHS,
+            verbose=1,
+        )
+
+        return model, triplets_test
+
+    model, triplets_test_full = train_triplet_model(model, triplets, PARAMS)
+    embedding_layers = model.layers[3]
+    embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
+
+
+    #### Triplet mining
+    semihard_triplets = []
+    output_dir = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.OUTPUT_DIR)
+    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
+    positive_pair_locs = generate_data.find_positive_pairs(speaker_spectograms)
+
+    i = PARAMS.DATA_GENERATOR.N_SAMPLES
+
+    ## keep going down the list and adding the semi-hard triplets
+    while len(semihard_triplets) < i:
+        spkr = positive_pair_locs[i][0]
+        idx1 = positive_pair_locs[i][1]
+        idx2 = positive_pair_locs[i][2]
+
+        negative = generate_data.find_random_negative(speaker_spectograms, spkr)
+        cand_triplet = (speaker_spectograms[spkr][idx1], speaker_spectograms[spkr][idx2], negative)
+        input_a = np.expand_dims(cand_triplet[0], axis=0)
+        input_p = np.expand_dims(cand_triplet[1], axis=0)
+        input_n = np.expand_dims(cand_triplet[2], axis=0)
+
+        pdb.set_trace()
+        dist_p, dist_n = compute_contrastive_embeddings(embedding_model, input_a, input_p, input_n)
+
+        if (dist_p[0] < dist_n[0]) and (dist_n[0] < dist_p[0] + PARAMS.TRAINING.MARGIN):
+            semihard_triplets.append(cand_triplet)
+        i += 1
+
+    if PARAMS.TRAINING.SEMIHARD_FERSH_MODEL == 'T':
+        model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
+        model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
+    else:
+        model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
+
+    test_a = np.array([triplet[0] for triplet in triplets_test_full])
+    test_p = np.array([triplet[1] for triplet in triplets_test_full])
+    test_n = np.array([triplet[2] for triplet in triplets_test_full])
 
     ####  Transfer learning- take embedding layers and score pairs similarly to contrastive loss
-    embedding_layers = model.layers[3]
-    dist_test, labels_test = compute_labelled_distances(embedding_layers, test_a, test_p, test_n, IMG_SHAPE)
+    dist_test, labels_test = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
 
     return dist_test, labels_test
 
@@ -122,15 +187,15 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS):
     quadruplets_test = quadruplets[:int(len(quadruplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)]
 
     ####  split and normalize the spectograms  ####
-    train_a = np.array([quadruplet[0] / -80.0 for quadruplet in quadruplets_train])
-    train_p = np.array([quadruplet[1] / -80.0 for quadruplet in quadruplets_train])
-    train_n1 = np.array([quadruplet[2] / -80.0 for quadruplet in quadruplets_train])
-    train_n2 = np.array([quadruplet[3] / -80.0 for quadruplet in quadruplets_train])
+    train_a = np.array([quadruplet[0] for quadruplet in quadruplets_train])
+    train_p = np.array([quadruplet[1] for quadruplet in quadruplets_train])
+    train_n1 = np.array([quadruplet[2] for quadruplet in quadruplets_train])
+    train_n2 = np.array([quadruplet[3] for quadruplet in quadruplets_train])
 
-    test_a = np.array([quadruplet[0] / -80.0 for quadruplet in quadruplets_test])
-    test_p = np.array([quadruplet[1] / -80.0 for quadruplet in quadruplets_test])
-    test_n1 = np.array([quadruplet[2] / -80.0 for quadruplet in quadruplets_test])
-    test_n2 = np.array([quadruplet[3] / -80.0 for quadruplet in quadruplets_test])
+    test_a = np.array([quadruplet[0] for quadruplet in quadruplets_test])
+    test_p = np.array([quadruplet[1] for quadruplet in quadruplets_test])
+    test_n1 = np.array([quadruplet[2] for quadruplet in quadruplets_test])
+    test_n2 = np.array([quadruplet[3] for quadruplet in quadruplets_test])
 
     ####  compile and fit model  ####
     model.compile(optimizer=PARAMS.TRAINING.OPTIMIZER)
@@ -145,7 +210,8 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS):
 
     ####  Transfer learning- take embedding layers and score pairs similarly to contrastive loss
     embedding_layers = model.layers[4]
-    dist_test, labels_test = compute_labelled_distances(embedding_layers, test_a, test_p, test_n1, IMG_SHAPE)
+    embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
+    dist_test, labels_test = compute_labelled_distances(embedding_model, test_a, test_p, test_n1)
 
     return dist_test, labels_test
 

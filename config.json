@@ -5,11 +5,12 @@
         "OUTPUT_DIR":"output/"
     },
     "TRAINING": {
-        "LOSS_TYPE":"quadruplet",
+        "LOSS_TYPE":"contrastive",
         "MARGIN":1,
         "BATCH_SIZE":25,
-        "EPOCHS":5,
-        "OPTIMIZER":"adam"
+        "EPOCHS":3,
+        "OPTIMIZER":"adam",
+        "SEMIHARD_FERSH_MODEL":"F"
     },
     "DATA_GENERATOR":{
         "OVERWRITE_SPECT":"F",
@@ -19,7 +20,8 @@
         "HOP_LENGTH":222,
         "WIN_LENGTH":512,
         "MAX_FRAMES":300,
-        "N_SAMPLES":1000,
-        "TEST_SPLIT":0.2
+        "N_SAMPLES":200,
+        "TEST_SPLIT":0.15,
+        "VALIDATION_SPLIT":0.1
     }
   }

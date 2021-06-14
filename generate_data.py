@@ -86,6 +86,7 @@ def generate_spectograms(audio_dir, spectogram_path, params):
             utterance = get_biggest_file(speech_session_dir)
             spect = generate_spectogram(utterance, params)
             spect = trim_spectogram(spect, params)
+            spect = spect / -80.0 ##normalize 
             ## Add an extra channel so the CNN works
             spect = np.expand_dims(spect, axis=-1)
 
