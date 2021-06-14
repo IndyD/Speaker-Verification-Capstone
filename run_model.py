@@ -48,11 +48,65 @@ def compute_labelled_distances(embedding_model, anchors, positives, negatives):
 
     return dist, labels
 
+def mine_triplets(embedding_model, PARAMS):
+    semihard_triplets = []
+    output_dir = os.path.join(os.path.dirname(__file__), 'output')
+    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
+    positive_pair_locs = generate_data.find_positive_pairs(speaker_spectograms)
+
+    i = PARAMS.DATA_GENERATOR.N_SAMPLES
+
+    ## keep going down the list and adding the semi-hard triplets
+    while len(semihard_triplets) < i:
+        spkr = positive_pair_locs[i][0]
+        idx1 = positive_pair_locs[i][1]
+        idx2 = positive_pair_locs[i][2]
+
+        negative = generate_data.find_random_negative(speaker_spectograms, spkr)
+        cand_triplet = (speaker_spectograms[spkr][idx1], speaker_spectograms[spkr][idx2], negative)
+        input_a = np.expand_dims(cand_triplet[0], axis=0)
+        input_p = np.expand_dims(cand_triplet[1], axis=0)
+        input_n = np.expand_dims(cand_triplet[2], axis=0)
+
+        dist_p, dist_n = compute_contrastive_embeddings(embedding_model, input_a, input_p, input_n)
+
+        if (dist_p[0] < dist_n[0]) and (dist_n[0] < dist_p[0] + PARAMS.TRAINING.MARGIN):
+            semihard_triplets.append(cand_triplet)
+        i += 1
+    return semihard_triplets
+
+def train_triplet_model(model, triplets, PARAMS):
+    ## train-test split
+    random.shuffle(triplets)
+    test_split = int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
+    val_split = test_split + int(len(triplets) * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT)
+    triplets_test = triplets[:test_split]
+    triplets_val = triplets[test_split:val_split]
+    triplets_train = triplets[val_split:]
+
+    ####  split and normalize the spectograms  ####
+    train_a = np.array([triplet[0] for triplet in triplets_train])
+    train_p = np.array([triplet[1] for triplet in triplets_train])
+    train_n = np.array([triplet[2] for triplet in triplets_train])
+
+    val_a = np.array([triplet[0] for triplet in triplets_val])
+    val_p = np.array([triplet[1] for triplet in triplets_val])
+    val_n = np.array([triplet[2] for triplet in triplets_val])
+
+    ####  compile and fit model  ####
+    model.compile(optimizer=PARAMS.TRAINING.OPTIMIZER)
+    history = model.fit(
+        [train_a, train_p, train_n],
+        validation_data=([val_a, val_p, val_n]),
+        epochs=PARAMS.TRAINING.EPOCHS,
+        verbose=1,
+    )
+    return model, triplets_test
 
 def run_siamsese_model(IMG_SHAPE, PARAMS):
     model = tf_models.build_siamese_model(IMG_SHAPE)
     (pairs, labels) = utils.load(
-        os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.OUTPUT_DIR, 'contrastive_pairs.pkl')
+        os.path.join(os.path.dirname(__file__), 'output', 'contrastive_pairs.pkl')
     )
 
     pairs_train, pairs_test, labels_train, labels_test = train_test_split(
@@ -86,7 +140,6 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
     )
 
     dist_test = model.predict([pairs_test_l, pairs_test_r])
-
     return dist_test, labels_test
 
 
@@ -94,72 +147,20 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
 def run_triplet_model(IMG_SHAPE, PARAMS):
     model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
     triplets = utils.load(
-        os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets.pkl')
+        os.path.join(os.path.dirname(__file__), 'output', 'contrastive_triplets.pkl')
     )
 
-    def train_triplet_model(model, triplets, PARAMS):
-        ## train-test split
-        random.shuffle(triplets)
-        test_split = int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
-        val_split = test_split + int(len(triplets) * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT)
-        triplets_test = triplets[:test_split]
-        triplets_val = triplets[test_split:val_split]
-        triplets_train = triplets[val_split:]
-
-        ####  split and normalize the spectograms  ####
-        train_a = np.array([triplet[0] for triplet in triplets_train])
-        train_p = np.array([triplet[1] for triplet in triplets_train])
-        train_n = np.array([triplet[2] for triplet in triplets_train])
-
-        val_a = np.array([triplet[0] for triplet in triplets_val])
-        val_p = np.array([triplet[1] for triplet in triplets_val])
-        val_n = np.array([triplet[2] for triplet in triplets_val])
-
-        ####  compile and fit model  ####
-        model.compile(optimizer=PARAMS.TRAINING.OPTIMIZER)
-        logging.info("Training tripet loss model...")
-
-        history = model.fit(
-            [train_a, train_p, train_n],
-            validation_data=([val_a, val_p, val_n]),
-            epochs=PARAMS.TRAINING.EPOCHS,
-            verbose=1,
-        )
-
-        return model, triplets_test
-
+    logging.info("Training tripet loss model on all triplets...")
     model, triplets_test_full = train_triplet_model(model, triplets, PARAMS)
     embedding_layers = model.layers[3]
     embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
 
 
     #### Triplet mining
-    semihard_triplets = []
-    output_dir = os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.OUTPUT_DIR)
-    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
-    positive_pair_locs = generate_data.find_positive_pairs(speaker_spectograms)
+    logging.info("Mining semi-hard triplets...")
+    semihard_triplets = mine_triplets(embedding_model, PARAMS)
 
-    i = PARAMS.DATA_GENERATOR.N_SAMPLES
-
-    ## keep going down the list and adding the semi-hard triplets
-    while len(semihard_triplets) < i:
-        spkr = positive_pair_locs[i][0]
-        idx1 = positive_pair_locs[i][1]
-        idx2 = positive_pair_locs[i][2]
-
-        negative = generate_data.find_random_negative(speaker_spectograms, spkr)
-        cand_triplet = (speaker_spectograms[spkr][idx1], speaker_spectograms[spkr][idx2], negative)
-        input_a = np.expand_dims(cand_triplet[0], axis=0)
-        input_p = np.expand_dims(cand_triplet[1], axis=0)
-        input_n = np.expand_dims(cand_triplet[2], axis=0)
-
-        pdb.set_trace()
-        dist_p, dist_n = compute_contrastive_embeddings(embedding_model, input_a, input_p, input_n)
-
-        if (dist_p[0] < dist_n[0]) and (dist_n[0] < dist_p[0] + PARAMS.TRAINING.MARGIN):
-            semihard_triplets.append(cand_triplet)
-        i += 1
-
+    logging.info("Training tripet loss model on semi-hard triplets...")
     if PARAMS.TRAINING.SEMIHARD_FERSH_MODEL == 'T':
         model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
         model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
@@ -180,7 +181,7 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
 def run_quadruplet_model(IMG_SHAPE, PARAMS):
     model = tf_models.build_quadruplet_model(IMG_SHAPE, PARAMS)
     quadruplets = utils.load(
-        os.path.join(PARAMS.PATHS.BASE_DIR, PARAMS.PATHS.OUTPUT_DIR, 'contrastive_quadruplets.pkl')
+        os.path.join(os.path.dirname(__file__), 'output', 'contrastive_quadruplets.pkl')
     )
 
     quadruplets_train = quadruplets[int(len(quadruplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT):]

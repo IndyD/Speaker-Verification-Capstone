@@ -1,11 +1,9 @@
 {
     "PATHS":{
-        "BASE_DIR":"/Users/indy/Documents/MSDS/git/Speaker-Verification-Capstone/",
-        "AUDIO_DIR":"test_data/aac/",
-        "OUTPUT_DIR":"output/"
+        "AUDIO_DIR":"test_data/aac/"
     },
     "TRAINING": {
-        "LOSS_TYPE":"contrastive",
+        "LOSS_TYPE":"triplet",
         "MARGIN":1,
         "BATCH_SIZE":25,
         "EPOCHS":3,
