@@ -67,7 +67,6 @@ def mine_triplets(embedding_model, PARAMS):
     ## keep going down the list and adding the semi-hard triplets
     while len(semihard_triplets) < PARAMS.DATA_GENERATOR.N_SAMPLES:
         spkr = positive_pair_locs[i][0]
-        print("Considering {s}...".format(s=spkr))
         idx1 = positive_pair_locs[i][1]
         idx2 = positive_pair_locs[i][2]
 
@@ -80,10 +79,45 @@ def mine_triplets(embedding_model, PARAMS):
         dist_p, dist_n = compute_contrastive_embeddings(embedding_model, input_a, input_p, input_n)
 
         if (dist_p[0] < dist_n[0]) and (dist_n[0] < dist_p[0] + PARAMS.TRAINING.MARGIN):
-            print("Added {s}".format(s=spkr))
             semihard_triplets.append(cand_triplet)
         i += 1
     return semihard_triplets
+
+def mine_quadruplets(embedding_model, PARAMS):
+    semihard_quadruplets = []
+    output_dir = os.path.join(os.path.dirname(__file__), 'output')
+    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
+    positive_pair_locs = generate_data.find_positive_pairs(speaker_spectograms)
+
+    i = PARAMS.DATA_GENERATOR.N_SAMPLES
+
+    ## keep going down the list and adding the semi-hard triplets
+    while len(semihard_quadruplets) < PARAMS.DATA_GENERATOR.N_SAMPLES:
+        spkr = positive_pair_locs[i][0]
+        idx1 = positive_pair_locs[i][1]
+        idx2 = positive_pair_locs[i][2]
+
+        negativeA, negativeB = generate_data.find_two_random_negatives(speaker_spectograms, spkr)
+
+        cand_quadruplet = (
+            speaker_spectograms[spkr][idx1], 
+            speaker_spectograms[spkr][idx2], 
+            negativeA,
+            negativeB
+        )
+
+        input_a = np.expand_dims(cand_quadruplet[0], axis=0)
+        input_p = np.expand_dims(cand_quadruplet[1], axis=0)
+        input_n1 = np.expand_dims(cand_quadruplet[2], axis=0)
+        input_n2 = np.expand_dims(cand_quadruplet[3], axis=0)
+
+        dist_pn1, dist_n1 = compute_contrastive_embeddings(embedding_model, input_a, input_p, input_n1)
+        dist_pn2, dist_n2 = compute_contrastive_embeddings(embedding_model, input_a, input_p, input_n2)
+
+        if (dist_pn1[0] < dist_n1[0]) and (dist_pn2[0] < dist_n2[0]) and (dist_n1[0] < dist_pn1[0] + PARAMS.TRAINING.MARGIN) and (dist_n2[0] < dist_pn2[0] + PARAMS.TRAINING.MARGIN):
+            semihard_quadruplets.append(cand_quadruplet)
+        i += 1
+    return semihard_quadruplets
 
 def train_triplet_model(model, triplets, PARAMS):
     ## train-test split
@@ -112,6 +146,38 @@ def train_triplet_model(model, triplets, PARAMS):
         verbose=1,
     )
     return model, triplets_test
+
+def train_quadruplet_model(model, quadruplets, PARAMS):
+    ## train-test split
+    random.shuffle(quadruplets)
+    test_split = int(len(quadruplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
+    val_split = test_split + int(len(quadruplets) * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT)
+    quadruplets_test = quadruplets[:test_split]
+    quadruplets_val = quadruplets[test_split:val_split]
+    quadruplets_train = quadruplets[val_split:]
+
+    ####  split and normalize the spectograms  ####
+    train_a = np.array([quadruplet[0] for quadruplet in quadruplets_train])
+    train_p = np.array([quadruplet[1] for quadruplet in quadruplets_train])
+    train_n1 = np.array([quadruplet[2] for quadruplet in quadruplets_train])
+    train_n2 = np.array([quadruplet[3] for quadruplet in quadruplets_train])
+
+    val_a = np.array([quadruplet[0] for quadruplet in quadruplets_val])
+    val_p = np.array([quadruplet[1] for quadruplet in quadruplets_val])
+    val_n1 = np.array([quadruplet[2] for quadruplet in quadruplets_val])
+    val_n2 = np.array([quadruplet[3] for quadruplet in quadruplets_val])
+
+    ####  compile and fit model  ####
+    model.compile(optimizer=PARAMS.TRAINING.OPTIMIZER)
+    history = model.fit(
+        [train_a, train_p, train_n1, train_n2],
+        validation_data=([val_a, val_p, val_n1, val_n2]),
+        epochs=PARAMS.TRAINING.EPOCHS,
+        verbose=1,
+    )
+    return model, quadruplets_test
+
+
 
 def run_siamsese_model(IMG_SHAPE, PARAMS):
     model = tf_models.build_siamese_model(IMG_SHAPE)
@@ -160,6 +226,7 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
         os.path.join(os.path.dirname(__file__), 'output', 'contrastive_triplets.pkl')
     )
 
+    #### Initial training on all tripplets
     logging.info("Training tripet loss model on all triplets...")
     model, triplets_test = train_triplet_model(model, triplets, PARAMS)
     embedding_layers = model.layers[3]
@@ -172,22 +239,27 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
 
     ####  Transfer learning- take inital embedding layers and score pairs similarly to contrastive loss
     dist_test_initial, labels_test_initial = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
-    initial_EER = calculate_EER(dist_test_initial, labels_test_initial)
-    logging.info("<<<< Initial EER: {EER} >>>>...".format(EER=initial_EER))
+    if PARAMS.TRAINING.MINE_SEMIHARD == 'T':
+        initial_EER = calculate_EER(dist_test_initial, labels_test_initial)
+        logging.info("<<<< Initial EER: {EER} >>>>...".format(EER=initial_EER))
 
-    #### Triplet mining
-    logging.info("Mining semi-hard triplets...")
-    semihard_triplets = mine_triplets(embedding_model, PARAMS)
+        #### Triplet mining
+        logging.info("Mining semi-hard triplets...")
+        semihard_triplets = mine_triplets(embedding_model, PARAMS)
 
-    logging.info("Training tripet loss model on semi-hard triplets...")
-    if PARAMS.TRAINING.SEMIHARD_FERSH_MODEL == 'T':
-        model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
-        model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
+        #### Train again with mined triplets
+        logging.info("Training tripet loss model on semi-hard triplets...")
+        if PARAMS.TRAINING.SEMIHARD_FERSH_MODEL == 'T':
+            model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
+            model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
+        else:
+            model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
+
+        ####  Transfer learning- take final embedding layers and score pairs similarly to contrastive loss
+        dist_test, labels_test = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
     else:
-        model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
-
-    ####  Transfer learning- take final embedding layers and score pairs similarly to contrastive loss
-    dist_test, labels_test = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
+        dist_test = dist_test_initial
+        labels_test = labels_test_initial
 
     return dist_test, labels_test
 
@@ -199,35 +271,41 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS):
         os.path.join(os.path.dirname(__file__), 'output', 'contrastive_quadruplets.pkl')
     )
 
-    quadruplets_train = quadruplets[int(len(quadruplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT):]
-    quadruplets_test = quadruplets[:int(len(quadruplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)]
+    #### Initial training on all quadruplets
+    logging.info("Training quadruplet loss model on all quadruplets...")
+    model, quadruplets_test = train_quadruplet_model(model, quadruplets, PARAMS)
+    embedding_layers = model.layers[4]
+    embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
 
-    ####  split and normalize the spectograms  ####
-    train_a = np.array([quadruplet[0] for quadruplet in quadruplets_train])
-    train_p = np.array([quadruplet[1] for quadruplet in quadruplets_train])
-    train_n1 = np.array([quadruplet[2] for quadruplet in quadruplets_train])
-    train_n2 = np.array([quadruplet[3] for quadruplet in quadruplets_train])
-
+    ####  Transfer learning- take inital embedding layers and score pairs similarly to contrastive loss
     test_a = np.array([quadruplet[0] for quadruplet in quadruplets_test])
     test_p = np.array([quadruplet[1] for quadruplet in quadruplets_test])
     test_n1 = np.array([quadruplet[2] for quadruplet in quadruplets_test])
-    test_n2 = np.array([quadruplet[3] for quadruplet in quadruplets_test])
 
-    ####  compile and fit model  ####
-    model.compile(optimizer=PARAMS.TRAINING.OPTIMIZER)
-    logging.info("Training tripet loss model...")
+    dist_test_initial, labels_test_initial = compute_labelled_distances(embedding_model, test_a, test_p, test_n1)
+    if PARAMS.TRAINING.MINE_SEMIHARD == 'T':
+        initial_EER = calculate_EER(dist_test_initial, labels_test_initial)
+        logging.info("<<<< Initial EER: {EER} >>>>...".format(EER=initial_EER))
 
-    history = model.fit(
-        [train_a, train_p, train_n1, train_n2],
-        validation_data=([test_a, test_p, test_n1, test_n2]),
-        epochs=PARAMS.TRAINING.EPOCHS,
-        verbose=1,
-    )
+        #### Quadruplet mining
+        logging.info("Mining semi-hard quadruplets...")
+        semihard_quadruplets = mine_quadruplets(embedding_model, PARAMS)
 
-    ####  Transfer learning- take embedding layers and score pairs similarly to contrastive loss
-    embedding_layers = model.layers[4]
-    embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
-    dist_test, labels_test = compute_labelled_distances(embedding_model, test_a, test_p, test_n1)
+        #### Train again with mined quadruplets
+        logging.info("Training quadruplet loss model on semi-hard quadruplets...")
+        if PARAMS.TRAINING.SEMIHARD_FERSH_MODEL == 'T':
+            model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
+            model, _ = train_triplet_model(model, semihard_quadruplets, PARAMS)
+        else:
+            model, _ = train_triplet_model(model, semihard_quadruplets, PARAMS)
+
+        ####  Transfer learning- take embedding layers and score pairs similarly to contrastive loss
+        embedding_layers = model.layers[4]
+        embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
+        dist_test, labels_test = compute_labelled_distances(embedding_model, test_a, test_p, test_n1)
+    else:
+        dist_test = dist_test_initial
+        labels_test = labels_test_initial
 
     return dist_test, labels_test
 

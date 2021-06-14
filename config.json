@@ -8,6 +8,7 @@
         "BATCH_SIZE":25,
         "EPOCHS":5,
         "OPTIMIZER":"adam",
+        "MINE_SEMIHARD":"T",
         "SEMIHARD_FERSH_MODEL":"F"
     },
     "DATA_GENERATOR":{
