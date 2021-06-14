@@ -11,6 +11,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Input
+from tensorflow.keras.callbacks import EarlyStopping
 
 import generate_data
 import tf_models
@@ -144,6 +145,7 @@ def train_triplet_model(model, triplets, PARAMS):
         validation_data=([val_a, val_p, val_n]),
         epochs=PARAMS.TRAINING.EPOCHS,
         verbose=1,
+        callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
     )
     return model, triplets_test
 
@@ -174,6 +176,8 @@ def train_quadruplet_model(model, quadruplets, PARAMS):
         validation_data=([val_a, val_p, val_n1, val_n2]),
         epochs=PARAMS.TRAINING.EPOCHS,
         verbose=1,
+        callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
+
     )
     return model, quadruplets_test
 
@@ -213,6 +217,7 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
         validation_data=([pairs_val_l, pairs_val_r], labels_val),
         epochs=PARAMS.TRAINING.EPOCHS,
         verbose=1,
+        callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
     )
 
     dist_test = model.predict([pairs_test_l, pairs_test_r])

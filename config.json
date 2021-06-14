@@ -7,6 +7,7 @@
         "MARGIN":1,
         "BATCH_SIZE":25,
         "EPOCHS":5,
+        "EARLY_STOP_ROUNDS":5,
         "OPTIMIZER":"adam",
         "MINE_SEMIHARD":"T",
         "SEMIHARD_FERSH_MODEL":"F"

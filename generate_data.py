@@ -35,7 +35,11 @@ def get_biggest_file(speech_session_dir):
         wav_sizes.append( (wav_path, os.path.getsize(wav_path)) )
     
     wav_sizes.sort(key=lambda tup: tup[1], reverse=True)
-    return wav_sizes[0][0]
+
+    if len(wav_sizes) == 0:
+        return None
+    else:
+        return wav_sizes[0][0]
 
 def generate_spectogram(wavpath, params):
     """
@@ -82,6 +86,8 @@ def generate_spectograms(audio_dir, spectogram_path, params):
         for speech_session in speech_session_dirs:
             speech_session_dir = os.path.join(speaker_dir, speech_session)
             utterance = get_biggest_file(speech_session_dir)
+            if not utterance:
+                continue
             spect = generate_spectogram(utterance, params)
             spect = trim_spectogram(spect, params)
             spect = spect / -80.0 ##normalize 
