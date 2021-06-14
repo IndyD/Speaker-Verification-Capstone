@@ -7,9 +7,9 @@ import random
 import sys
 from collections import namedtuple, defaultdict
 
-import librosa
+#import librosa
 import numpy as np
-import librosa.display
+#import librosa.display
 import utils 
 
 import pdb
@@ -215,6 +215,9 @@ def make_contrastive_quadruplets(corpus_data, n_quadruplets):
 
 
 if __name__ == "__main__":
+    import librosa  
+    import librosa.display
+	
     ### Set variables from config file ###
     PARAMS = utils.config_init(sys.argv)
     audio_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.AUDIO_DIR)
