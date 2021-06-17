@@ -1,15 +1,15 @@
 {
     "PATHS":{
-        "AUDIO_DIR":"test_data/aac/"
+        "AUDIO_DIR":"test_data/aac/",
+        "OUTPUT_DIR":"output"
     },
     "MODEL":{
-        "LOSS_TYPE":"quadruplet",
+        "LOSS_TYPE":"contrastive",
         "MARGIN":1,
         "N_DENSE":2,
         "DENSE_ACTIVATION":"relu",
         "DENSE1_NODES":1024,
         "DENSE2_NODES":1024,
-        "DENSE3_NODES":1024,
         "L2_WEIGHT_DECAY":0.00001
     },
     "TRAINING": {

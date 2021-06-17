@@ -225,7 +225,7 @@ if __name__ == "__main__":
     ### Set variables from config file ###
     PARAMS = utils.config_init(sys.argv)
     audio_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.AUDIO_DIR)
-    output_dir = os.path.join(os.path.dirname(__file__), 'output')
+    output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
     spectogram_path = os.path.join(output_dir, 'speaker_spectograms.pkl')

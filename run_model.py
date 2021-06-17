@@ -85,7 +85,7 @@ def compute_labelled_distances(embedding_model, anchors, positives, negatives):
 
 def mine_triplets(embedding_model, PARAMS):
     semihard_triplets = []
-    output_dir = os.path.join(os.path.dirname(__file__), 'output')
+    output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
     positive_pair_locs = generate_data.find_positive_pairs(speaker_spectograms)
 
@@ -112,7 +112,7 @@ def mine_triplets(embedding_model, PARAMS):
 
 def mine_quadruplets(embedding_model, PARAMS):
     semihard_quadruplets = []
-    output_dir = os.path.join(os.path.dirname(__file__), 'output')
+    output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
     positive_pair_locs = generate_data.find_positive_pairs(speaker_spectograms)
 
@@ -150,25 +150,19 @@ def train_triplet_model(model, triplets, PARAMS):
     ## train-test split
     random.shuffle(triplets)
     test_split = int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
-    val_split = test_split + int(len(triplets) * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT)
     triplets_test = triplets[:test_split]
-    triplets_val = triplets[test_split:val_split]
-    triplets_train = triplets[val_split:]
+    triplets_train = triplets[test_split:]
 
     ####  split and normalize the spectograms  ####
     train_a = np.array([triplet[0] for triplet in triplets_train])
     train_p = np.array([triplet[1] for triplet in triplets_train])
     train_n = np.array([triplet[2] for triplet in triplets_train])
 
-    val_a = np.array([triplet[0] for triplet in triplets_val])
-    val_p = np.array([triplet[1] for triplet in triplets_val])
-    val_n = np.array([triplet[2] for triplet in triplets_val])
-
     ####  compile and fit model  ####
     model.compile(optimizer=set_optimizer(PARAMS))
     history = model.fit(
         [train_a, train_p, train_n],
-        validation_data=([val_a, val_p, val_n]),
+        validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
         epochs=PARAMS.TRAINING.EPOCHS,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
@@ -179,10 +173,8 @@ def train_quadruplet_model(model, quadruplets, PARAMS):
     ## train-test split
     random.shuffle(quadruplets)
     test_split = int(len(quadruplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
-    val_split = test_split + int(len(quadruplets) * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT)
     quadruplets_test = quadruplets[:test_split]
-    quadruplets_val = quadruplets[test_split:val_split]
-    quadruplets_train = quadruplets[val_split:]
+    quadruplets_train = quadruplets[test_split:]
 
     ####  split and normalize the spectograms  ####
     train_a = np.array([quadruplet[0] for quadruplet in quadruplets_train])
@@ -190,16 +182,11 @@ def train_quadruplet_model(model, quadruplets, PARAMS):
     train_n1 = np.array([quadruplet[2] for quadruplet in quadruplets_train])
     train_n2 = np.array([quadruplet[3] for quadruplet in quadruplets_train])
 
-    val_a = np.array([quadruplet[0] for quadruplet in quadruplets_val])
-    val_p = np.array([quadruplet[1] for quadruplet in quadruplets_val])
-    val_n1 = np.array([quadruplet[2] for quadruplet in quadruplets_val])
-    val_n2 = np.array([quadruplet[3] for quadruplet in quadruplets_val])
-
     ####  compile and fit model  ####
     model.compile(optimizer=set_optimizer(PARAMS))
     history = model.fit(
         [train_a, train_p, train_n1, train_n2],
-        validation_data=([val_a, val_p, val_n1, val_n2]),
+        validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
         epochs=PARAMS.TRAINING.EPOCHS,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
@@ -208,19 +195,13 @@ def train_quadruplet_model(model, quadruplets, PARAMS):
     return model, quadruplets_test
 
 
-
 def run_siamsese_model(IMG_SHAPE, PARAMS):
     model = tf_models.build_siamese_model(IMG_SHAPE, PARAMS)
     (pairs, labels) = utils.load(
-        os.path.join(os.path.dirname(__file__), 'output', 'contrastive_pairs.pkl')
+        os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_pairs.pkl')
     )
-
     pairs_train, pairs_test, labels_train, labels_test = train_test_split(
         pairs, labels, test_size=PARAMS.DATA_GENERATOR.TEST_SPLIT, random_state=123
-    )
-    val_split = (1 / (1.0 - PARAMS.DATA_GENERATOR.TEST_SPLIT)) * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
-    pairs_train, pairs_val, labels_train, labels_val = train_test_split(
-        pairs_train, labels_train, test_size=val_split, random_state=123
     )
 
     ####  split and normalize the spectograms  ####
@@ -228,11 +209,8 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
     pairs_train_r = np.array([pair[1] for pair in pairs_train])
     pairs_test_l = np.array([pair[0] for pair in pairs_test])
     pairs_test_r = np.array([pair[1] for pair in pairs_test])
-    pairs_val_l = np.array([pair[0] for pair in pairs_val])
-    pairs_val_r = np.array([pair[1] for pair in pairs_val])
     labels_train = tf.cast(np.array(labels_train), tf.float32)
     labels_test = tf.cast(np.array(labels_test), tf.float32)
-    labels_val = tf.cast(np.array(labels_val), tf.float32)
 
     ####  compile and fit model  ####
     model.compile(
@@ -243,7 +221,7 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
 
     history = model.fit(
         [pairs_train_l, pairs_train_r], labels_train,
-        validation_data=([pairs_val_l, pairs_val_r], labels_val),
+        validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
         epochs=PARAMS.TRAINING.EPOCHS,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
@@ -257,7 +235,7 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
 def run_triplet_model(IMG_SHAPE, PARAMS):
     model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
     triplets = utils.load(
-        os.path.join(os.path.dirname(__file__), 'output', 'contrastive_triplets.pkl')
+        os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets.pkl')
     )
 
     #### Initial training on all tripplets
@@ -302,7 +280,7 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
 def run_quadruplet_model(IMG_SHAPE, PARAMS):
     model = tf_models.build_quadruplet_model(IMG_SHAPE, PARAMS)
     quadruplets = utils.load(
-        os.path.join(os.path.dirname(__file__), 'output', 'contrastive_quadruplets.pkl')
+        os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_quadruplets.pkl')
     )
 
     #### Initial training on all quadruplets
@@ -342,9 +320,6 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS):
         labels_test = labels_test_initial
 
     return dist_test, labels_test
-
-
-
 
 
 
