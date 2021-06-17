@@ -60,7 +60,7 @@ class QuadrupletLossLayer(Layer):
         return loss
 
 
-def build_vgg7_embedding_model(IMG_SHAPE):
+def build_vgg7_embedding_model(IMG_SHAPE, PARAMS):
     ''' 
     Return and embedding model using the fist 7 layer of VGG16 w/ 2 dense layers
     This architechture is from the VGG7 implementaion of Velez
@@ -68,19 +68,40 @@ def build_vgg7_embedding_model(IMG_SHAPE):
     ## Note that VGG16 was trained on 3 channels. We can't use the weights w/ 1 channel so set to None
     VGG16 = tf.keras.applications.VGG16(input_shape=IMG_SHAPE, include_top=False, weights=None)
     VGG7 = VGG16.layers[0:7]
-    embedding_layers = [
-        Flatten(name='flatten'),
-        Dense(1024),
-        Activation('relu'),
-        Dense(1024),
-        Activation('relu'),
-    ]
+    if PARAMS.MODEL.N_DENSE == 1:
+        embedding_layers = [
+            Flatten(name='flatten'),
+            Dense(
+                PARAMS.MODEL.DENSE1_NODES, 
+                kernel_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY),
+                bias_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY)
+            ),
+            Activation(PARAMS.MODEL.DENSE_ACTIVATION),
+        ]
+    elif PARAMS.MODEL.N_DENSE == 2:
+        embedding_layers = [
+            Flatten(name='flatten'),
+            Dense(
+                PARAMS.MODEL.DENSE1_NODES, 
+                kernel_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY),
+                bias_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY)
+            ),
+            Activation(PARAMS.MODEL.DENSE_ACTIVATION),
+            Dense(
+                PARAMS.MODEL.DENSE2_NODES, 
+                kernel_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY),
+                bias_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY)
+            ),
+            Activation(PARAMS.MODEL.DENSE_ACTIVATION),
+        ]
+    else:
+        raise ValueError('ERROR: Invalid PARAMS.MODEL.N_DENSE value!')
     embedding_model = Sequential(VGG7 + embedding_layers)
     return embedding_model
 
-def build_siamese_model(IMG_SHAPE):
+def build_siamese_model(IMG_SHAPE, PARAMS):
     ''' Build a siamese vgg7 model that computes the distance between two images '''
-    embedding_model = build_vgg7_embedding_model(IMG_SHAPE)
+    embedding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
     
     imgA = Input(shape=IMG_SHAPE)
     imgB = Input(shape=IMG_SHAPE)
@@ -96,7 +117,7 @@ def build_siamese_model(IMG_SHAPE):
 def build_triplet_model(IMG_SHAPE, PARAMS):
     ''' Build a triplet vgg7 model that computes the distance between
     an anchor image, a positive image, and a negative image '''
-    triplet_encoding_model = build_vgg7_embedding_model(IMG_SHAPE)
+    triplet_encoding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
     triplet_encoding_model.add(Lambda(lambda x: K.l2_normalize(x,axis=-1)))
     
     anchor_input = Input(IMG_SHAPE, name="anchor_input")
@@ -109,7 +130,7 @@ def build_triplet_model(IMG_SHAPE, PARAMS):
     encoded_n = triplet_encoding_model(negative_input)
     
     #TripletLoss Layer
-    loss_layer = TripletLossLayer(margin=PARAMS.TRAINING.MARGIN,name='triplet_loss_layer')([encoded_a, encoded_p, encoded_n])
+    loss_layer = TripletLossLayer(margin=PARAMS.MODEL.MARGIN,name='triplet_loss_layer')([encoded_a, encoded_p, encoded_n])
     
     # Connect the inputs with the outputs
     triplet_model = Model(inputs=[anchor_input,positive_input,negative_input],outputs=loss_layer)
@@ -118,7 +139,7 @@ def build_triplet_model(IMG_SHAPE, PARAMS):
 def build_quadruplet_model(IMG_SHAPE, PARAMS):
     ''' Build a quadruplet vgg7 model that computes the distance between
     an anchor image, a positive image, and two dissimilar negative images '''
-    quadruplet_encoding_model = build_vgg7_embedding_model(IMG_SHAPE)
+    quadruplet_encoding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
     quadruplet_encoding_model.add(Lambda(lambda x: K.l2_normalize(x,axis=-1)))
     
     anchor_input = Input(IMG_SHAPE, name="anchor_input")
@@ -134,7 +155,7 @@ def build_quadruplet_model(IMG_SHAPE, PARAMS):
     encoded_n2 = quadruplet_encoding_model(negative_input2)
     
     #QuadrupletLoss Layer
-    loss_layer = QuadrupletLossLayer(margin=PARAMS.TRAINING.MARGIN,name='quadruplet_loss_layer')([encoded_a, encoded_p, encoded_n1, encoded_n2])
+    loss_layer = QuadrupletLossLayer(margin=PARAMS.MODEL.MARGIN,name='quadruplet_loss_layer')([encoded_a, encoded_p, encoded_n1, encoded_n2])
     
     # Connect the inputs with the outputs
     quadruplet_model = Model(inputs=[anchor_input, positive_input, negative_input1, negative_input2],outputs=loss_layer)

@@ -2,15 +2,27 @@
     "PATHS":{
         "AUDIO_DIR":"test_data/aac/"
     },
-    "TRAINING": {
-        "LOSS_TYPE":"triplet",
+    "MODEL":{
+        "LOSS_TYPE":"quadruplet",
         "MARGIN":1,
+        "N_DENSE":2,
+        "DENSE_ACTIVATION":"relu",
+        "DENSE1_NODES":1024,
+        "DENSE2_NODES":1024,
+        "DENSE3_NODES":1024,
+        "L2_WEIGHT_DECAY":0.00001
+    },
+    "TRAINING": {
         "BATCH_SIZE":25,
         "EPOCHS":5,
         "EARLY_STOP_ROUNDS":5,
-        "OPTIMIZER":"adam",
+        "LEARNING_RATE":0.0001,
+        "LEARNING_DECAY_RATE":0.99,
+        "LEARNING_DECAY_STEPS":100000,
+        "MOMENTUM":0.9,
+        "OPTIMIZER":"sgd",
         "MINE_SEMIHARD":"T",
-        "SEMIHARD_FERSH_MODEL":"F"
+        "SEMIHARD_FRESH_MODEL":"T"
     },
     "DATA_GENERATOR":{
         "OVERWRITE_SPECT":"F",

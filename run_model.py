@@ -12,6 +12,8 @@ from sklearn.metrics import roc_curve
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Input
 from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.optimizers import Adam, SGD
+from tensorflow.keras.optimizers.schedules import ExponentialDecay
 
 import generate_data
 import tf_models
@@ -20,6 +22,30 @@ import utils
 import pdb
 
 logging.basicConfig(level=logging.DEBUG)
+
+
+def set_optimizer(PARAMS):
+    lr_schedule = ExponentialDecay(
+        PARAMS.TRAINING.LEARNING_RATE,
+        decay_steps=PARAMS.TRAINING.LEARNING_DECAY_STEPS,
+        decay_rate=PARAMS.TRAINING.LEARNING_DECAY_RATE,
+        staircase=False
+    )
+
+    if PARAMS.TRAINING.OPTIMIZER == 'adam':
+        opt = Adam(
+            learning_rate=lr_schedule, 
+        )
+        print(1)
+    elif PARAMS.TRAINING.OPTIMIZER == 'sgd':
+        opt = SGD(
+            learning_rate=lr_schedule, 
+            momentum=PARAMS.TRAINING.MOMENTUM
+        )
+    else:
+        raise ValueError('ERROR: Invalid PARAMS.TRAINING.OPTIMIZER argument!')
+
+    return opt
 
 def calculate_EER(dist, labels):
     # scale distances so EER works
@@ -79,7 +105,7 @@ def mine_triplets(embedding_model, PARAMS):
 
         dist_p, dist_n = compute_contrastive_embeddings(embedding_model, input_a, input_p, input_n)
 
-        if (dist_p[0] < dist_n[0]) and (dist_n[0] < dist_p[0] + PARAMS.TRAINING.MARGIN):
+        if (dist_p[0] < dist_n[0]) and (dist_n[0] < dist_p[0] + PARAMS.MODEL.MARGIN):
             semihard_triplets.append(cand_triplet)
         i += 1
     return semihard_triplets
@@ -139,7 +165,7 @@ def train_triplet_model(model, triplets, PARAMS):
     val_n = np.array([triplet[2] for triplet in triplets_val])
 
     ####  compile and fit model  ####
-    model.compile(optimizer=PARAMS.TRAINING.OPTIMIZER)
+    model.compile(optimizer=set_optimizer(PARAMS))
     history = model.fit(
         [train_a, train_p, train_n],
         validation_data=([val_a, val_p, val_n]),
@@ -170,7 +196,7 @@ def train_quadruplet_model(model, quadruplets, PARAMS):
     val_n2 = np.array([quadruplet[3] for quadruplet in quadruplets_val])
 
     ####  compile and fit model  ####
-    model.compile(optimizer=PARAMS.TRAINING.OPTIMIZER)
+    model.compile(optimizer=set_optimizer(PARAMS))
     history = model.fit(
         [train_a, train_p, train_n1, train_n2],
         validation_data=([val_a, val_p, val_n1, val_n2]),
@@ -184,7 +210,7 @@ def train_quadruplet_model(model, quadruplets, PARAMS):
 
 
 def run_siamsese_model(IMG_SHAPE, PARAMS):
-    model = tf_models.build_siamese_model(IMG_SHAPE)
+    model = tf_models.build_siamese_model(IMG_SHAPE, PARAMS)
     (pairs, labels) = utils.load(
         os.path.join(os.path.dirname(__file__), 'output', 'contrastive_pairs.pkl')
     )
@@ -209,7 +235,10 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
     labels_val = tf.cast(np.array(labels_val), tf.float32)
 
     ####  compile and fit model  ####
-    model.compile(loss=tf_models.contrastive_loss_with_margin(margin=PARAMS.TRAINING.MARGIN), optimizer=PARAMS.TRAINING.OPTIMIZER)
+    model.compile(
+        loss=tf_models.contrastive_loss_with_margin(margin=PARAMS.MODEL.MARGIN), 
+        optimizer=set_optimizer(PARAMS)
+    )
     logging.info("Training contrastive pair model...")
 
     history = model.fit(
@@ -254,7 +283,7 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
 
         #### Train again with mined triplets
         logging.info("Training tripet loss model on semi-hard triplets...")
-        if PARAMS.TRAINING.SEMIHARD_FERSH_MODEL == 'T':
+        if PARAMS.TRAINING.SEMIHARD_FRESH_MODEL == 'T':
             model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
             model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
         else:
@@ -298,7 +327,7 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS):
 
         #### Train again with mined quadruplets
         logging.info("Training quadruplet loss model on semi-hard quadruplets...")
-        if PARAMS.TRAINING.SEMIHARD_FERSH_MODEL == 'T':
+        if PARAMS.TRAINING.SEMIHARD_FRESH_MODEL == 'T':
             model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
             model, _ = train_triplet_model(model, semihard_quadruplets, PARAMS)
         else:
@@ -328,11 +357,11 @@ if __name__ == '__main__':
     )
 
     ####  build model  ####
-    if PARAMS.TRAINING.LOSS_TYPE == 'contrastive':
+    if PARAMS.MODEL.LOSS_TYPE == 'contrastive':
         dist_test, labels_test = run_siamsese_model(IMG_SHAPE, PARAMS)
-    if PARAMS.TRAINING.LOSS_TYPE == 'triplet':
+    if PARAMS.MODEL.LOSS_TYPE == 'triplet':
         dist_test, labels_test = run_triplet_model(IMG_SHAPE, PARAMS)
-    if PARAMS.TRAINING.LOSS_TYPE == 'quadruplet':
+    if PARAMS.MODEL.LOSS_TYPE == 'quadruplet':
         dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS)
 
     ####  Find EER   ####
