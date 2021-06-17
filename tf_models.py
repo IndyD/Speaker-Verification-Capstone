@@ -59,6 +59,10 @@ class QuadrupletLossLayer(Layer):
         self.add_loss(loss)
         return loss
 
+def get_vgg7_layers(IMG_SHAPE):
+    VGG16 = tf.keras.applications.VGG16(input_shape=IMG_SHAPE, include_top=False, weights=None)
+    VGG7 = VGG16.layers[0:7]
+    return VGG7
 
 def build_vgg7_embedding_model(IMG_SHAPE, PARAMS):
     ''' 
@@ -66,8 +70,7 @@ def build_vgg7_embedding_model(IMG_SHAPE, PARAMS):
     This architechture is from the VGG7 implementaion of Velez
     '''
     ## Note that VGG16 was trained on 3 channels. We can't use the weights w/ 1 channel so set to None
-    VGG16 = tf.keras.applications.VGG16(input_shape=IMG_SHAPE, include_top=False, weights=None)
-    VGG7 = VGG16.layers[0:7]
+    VGG7 = get_vgg7_layers(IMG_SHAPE)
     if PARAMS.MODEL.N_DENSE == 1:
         embedding_layers = [
             Flatten(name='flatten'),
@@ -99,9 +102,10 @@ def build_vgg7_embedding_model(IMG_SHAPE, PARAMS):
     embedding_model = Sequential(VGG7 + embedding_layers)
     return embedding_model
 
-def build_siamese_model(IMG_SHAPE, PARAMS):
+def build_siamese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     ''' Build a siamese vgg7 model that computes the distance between two images '''
-    embedding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
+    if not embedding_model:
+        embedding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
     
     imgA = Input(shape=IMG_SHAPE)
     imgB = Input(shape=IMG_SHAPE)
@@ -114,20 +118,21 @@ def build_siamese_model(IMG_SHAPE, PARAMS):
     return siamese_vgg7_model
 
 
-def build_triplet_model(IMG_SHAPE, PARAMS):
+def build_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     ''' Build a triplet vgg7 model that computes the distance between
     an anchor image, a positive image, and a negative image '''
-    triplet_encoding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
-    triplet_encoding_model.add(Lambda(lambda x: K.l2_normalize(x,axis=-1)))
+    if not embedding_model:
+        embedding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
+    embedding_model.add(Lambda(lambda x: K.l2_normalize(x,axis=-1)))
     
     anchor_input = Input(IMG_SHAPE, name="anchor_input")
     positive_input = Input(IMG_SHAPE, name="positive_input")
     negative_input = Input(IMG_SHAPE, name="negative_input") 
     
     # Generate the encodings (feature vectors) for the three images
-    encoded_a = triplet_encoding_model(anchor_input)
-    encoded_p = triplet_encoding_model(positive_input)
-    encoded_n = triplet_encoding_model(negative_input)
+    encoded_a = embedding_model(anchor_input)
+    encoded_p = embedding_model(positive_input)
+    encoded_n = embedding_model(negative_input)
     
     #TripletLoss Layer
     loss_layer = TripletLossLayer(margin=PARAMS.MODEL.MARGIN,name='triplet_loss_layer')([encoded_a, encoded_p, encoded_n])
@@ -136,11 +141,12 @@ def build_triplet_model(IMG_SHAPE, PARAMS):
     triplet_model = Model(inputs=[anchor_input,positive_input,negative_input],outputs=loss_layer)
     return triplet_model
 
-def build_quadruplet_model(IMG_SHAPE, PARAMS):
+def build_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     ''' Build a quadruplet vgg7 model that computes the distance between
     an anchor image, a positive image, and two dissimilar negative images '''
-    quadruplet_encoding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
-    quadruplet_encoding_model.add(Lambda(lambda x: K.l2_normalize(x,axis=-1)))
+    if not embedding_model:
+        embedding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
+    embedding_model.add(Lambda(lambda x: K.l2_normalize(x,axis=-1)))
     
     anchor_input = Input(IMG_SHAPE, name="anchor_input")
     positive_input = Input(IMG_SHAPE, name="positive_input")
@@ -149,10 +155,10 @@ def build_quadruplet_model(IMG_SHAPE, PARAMS):
 
     
     # Generate the encodings (feature vectors) for the three images
-    encoded_a = quadruplet_encoding_model(anchor_input)
-    encoded_p = quadruplet_encoding_model(positive_input)
-    encoded_n1 = quadruplet_encoding_model(negative_input1)
-    encoded_n2 = quadruplet_encoding_model(negative_input2)
+    encoded_a = embedding_model(anchor_input)
+    encoded_p = embedding_model(positive_input)
+    encoded_n1 = embedding_model(negative_input1)
+    encoded_n2 = embedding_model(negative_input2)
     
     #QuadrupletLoss Layer
     loss_layer = QuadrupletLossLayer(margin=PARAMS.MODEL.MARGIN,name='quadruplet_loss_layer')([encoded_a, encoded_p, encoded_n1, encoded_n2])
@@ -160,3 +166,22 @@ def build_quadruplet_model(IMG_SHAPE, PARAMS):
     # Connect the inputs with the outputs
     quadruplet_model = Model(inputs=[anchor_input, positive_input, negative_input1, negative_input2],outputs=loss_layer)
     return quadruplet_model
+
+def build_crossentropy_model(n_classes, IMG_SHAPE, PARAMS):
+    ''' Build a cross-entropy model for baseline performance and to pre-train
+    before fine-tuning with distance metrics '''
+
+    VGG7 = get_vgg7_layers(IMG_SHAPE)
+    crossentropy_layers = [
+        Flatten(name='flatten'),
+        Dense(
+            PARAMS.MODEL.CROSSENTROPY_DENSE_NODES, 
+            activation=PARAMS.MODEL.CROSSENTROPY_ACTIVATION
+        ),
+        Dense(
+            n_classes,
+            activation='softmax'
+        ),
+    ]
+    crossentropy_model = Sequential(VGG7 + crossentropy_layers)
+    return crossentropy_model

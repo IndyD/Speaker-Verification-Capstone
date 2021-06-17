@@ -47,6 +47,29 @@ def set_optimizer(PARAMS):
 
     return opt
 
+def set_crossentropy_optimizer(PARAMS):
+    lr_schedule = ExponentialDecay(
+        PARAMS.TRAINING.CROSSENTROPY_LEARNING_RATE,
+        decay_steps=PARAMS.TRAINING.CROSSENTROPY_LEARNING_DECAY_STEPS,
+        decay_rate=PARAMS.TRAINING.CROSSENTROPY_LEARNING_DECAY_RATE,
+        staircase=False
+    )
+
+    if PARAMS.TRAINING.CROSSENTROPY_OPTIMIZER == 'adam':
+        opt = Adam(
+            learning_rate=lr_schedule, 
+        )
+        print(1)
+    elif PARAMS.TRAINING.CROSSENTROPY_OPTIMIZER == 'sgd':
+        opt = SGD(
+            learning_rate=lr_schedule, 
+            momentum=PARAMS.TRAINING.CROSSENTROPY_MOMENTUM
+        )
+    else:
+        raise ValueError('ERROR: Invalid PARAMS.TRAINING.OPTIMIZER argument!')
+
+    return opt
+
 def calculate_EER(dist, labels):
     # scale distances so EER works
     preds = dist / dist.max()
@@ -57,7 +80,7 @@ def calculate_EER(dist, labels):
 
 def transfer_embedding_layers(embedding_layers, IMG_SHAPE):
     img_input = Input(IMG_SHAPE)
-    emb_model = Sequential([Input(IMG_SHAPE)] + embedding_layers.layers)
+    emb_model = Sequential([Input(IMG_SHAPE)] + embedding_layers)
     trained_embedding_model = Model(inputs=img_input, outputs=emb_model(img_input))
     return trained_embedding_model
 
@@ -68,7 +91,6 @@ def compute_contrastive_embeddings(embedding_model, anchors, positives, negative
 
     pos_pairs = zip(embeddings_a, embeddings_p)
     dist_p = [np.linalg.norm(emb[0] - emb[1]) for emb in pos_pairs]
-
     neg_pairs = zip(embeddings_a, embeddings_n)
     dist_n = [np.linalg.norm(emb[0] - emb[1]) for emb in neg_pairs]
 
@@ -77,10 +99,8 @@ def compute_contrastive_embeddings(embedding_model, anchors, positives, negative
 
 def compute_labelled_distances(embedding_model, anchors, positives, negatives):
     dist_p, dist_n = compute_contrastive_embeddings(embedding_model, anchors, positives, negatives)
-
     dist = np.array(dist_p + dist_n)
     labels = np.concatenate((np.ones(len(dist_p)), np.zeros(len(dist_n))))
-
     return dist, labels
 
 def mine_triplets(embedding_model, PARAMS):
@@ -194,6 +214,39 @@ def train_quadruplet_model(model, quadruplets, PARAMS):
     )
     return model, quadruplets_test
 
+def run_cross_entropy_model(IMG_SHAPE, PARAMS):
+    output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
+    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
+    n_classes = len(speaker_spectograms.keys())
+    X = []
+    y = []
+
+    ## This changes the label to integers so cross-entropy loss works
+    for i, spk in enumerate(speaker_spectograms.keys()):
+        for spect in speaker_spectograms[spk]:
+            X.append(spect)
+            y.append(i)
+
+    X = np.array(X)
+    y = np.array(y)
+
+    model = tf_models.build_crossentropy_model(n_classes, IMG_SHAPE, PARAMS)
+
+    model.compile(
+        loss='sparse_categorical_crossentropy', 
+        optimizer=set_crossentropy_optimizer(PARAMS)
+    )
+    logging.info("Training cross-entropy model to pretrain for distnace metric models...")
+
+    history = model.fit(
+        X, y,
+        validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
+        epochs=PARAMS.TRAINING.CROSSENTROPY_EPOCHS,
+        verbose=1,
+        callbacks=[EarlyStopping(patience=PARAMS.TRAINING.CROSSENTROPY_EARLY_STOP_ROUNDS)],
+    )
+    return model
+
 
 def run_siamsese_model(IMG_SHAPE, PARAMS):
     model = tf_models.build_siamese_model(IMG_SHAPE, PARAMS)
@@ -241,7 +294,7 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
     #### Initial training on all tripplets
     logging.info("Training tripet loss model on all triplets...")
     model, triplets_test = train_triplet_model(model, triplets, PARAMS)
-    embedding_layers = model.layers[3]
+    embedding_layers = model.layers[3].layers
     embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
 
     #### Calculate initial EER
@@ -268,6 +321,8 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
             model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
 
         ####  Transfer learning- take final embedding layers and score pairs similarly to contrastive loss
+        embedding_layers = model.layers[3].layers
+        embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
         dist_test, labels_test = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
     else:
         dist_test = dist_test_initial
@@ -286,7 +341,7 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS):
     #### Initial training on all quadruplets
     logging.info("Training quadruplet loss model on all quadruplets...")
     model, quadruplets_test = train_quadruplet_model(model, quadruplets, PARAMS)
-    embedding_layers = model.layers[4]
+    embedding_layers = model.layers[4].layers
     embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
 
     ####  Transfer learning- take inital embedding layers and score pairs similarly to contrastive loss
@@ -312,7 +367,7 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS):
             model, _ = train_triplet_model(model, semihard_quadruplets, PARAMS)
 
         ####  Transfer learning- take embedding layers and score pairs similarly to contrastive loss
-        embedding_layers = model.layers[4]
+        embedding_layers = model.layers[4].layers
         embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
         dist_test, labels_test = compute_labelled_distances(embedding_model, test_a, test_p, test_n1)
     else:
@@ -330,6 +385,28 @@ if __name__ == '__main__':
         PARAMS.DATA_GENERATOR.MAX_FRAMES,
         1
     )
+
+    if PARAMS.MODEL.CROSSENTROPY_PRETRAIN == 'T':
+        model = run_cross_entropy_model(IMG_SHAPE, PARAMS)
+
+        triplets = utils.load(
+            os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets.pkl')
+        )
+        random.shuffle(triplets)
+        test_split = int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
+        triplets_test = triplets[:test_split]
+
+        test_a = np.array([triplet[0] for triplet in triplets_test])
+        test_p = np.array([triplet[1] for triplet in triplets_test])
+        test_n = np.array([triplet[2] for triplet in triplets_test])
+
+        embedding_layers = model.layers[:-1]
+        embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
+
+        dist_test_crossentropy, labels_test_crossentropy = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
+        crossentropy_EER = calculate_EER(dist_test_crossentropy, labels_test_crossentropy)
+        logging.info("<<<< Cross-entropy pretrain EER: {EER} >>>>...".format(EER=crossentropy_EER))
+
 
     ####  build model  ####
     if PARAMS.MODEL.LOSS_TYPE == 'contrastive':
