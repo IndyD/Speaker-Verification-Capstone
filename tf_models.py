@@ -185,3 +185,4 @@ def build_crossentropy_model(n_classes, IMG_SHAPE, PARAMS):
     ]
     crossentropy_model = Sequential(VGG7 + crossentropy_layers)
     return crossentropy_model
+    

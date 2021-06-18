@@ -184,6 +184,7 @@ def train_triplet_model(model, triplets, PARAMS):
         [train_a, train_p, train_n],
         validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
         epochs=PARAMS.TRAINING.EPOCHS,
+        batch_size=PARAMS.TRAINING.BATCH_SIZE,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
     )
@@ -208,6 +209,7 @@ def train_quadruplet_model(model, quadruplets, PARAMS):
         [train_a, train_p, train_n1, train_n2],
         validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
         epochs=PARAMS.TRAINING.EPOCHS,
+        batch_size=PARAMS.TRAINING.BATCH_SIZE,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
 
@@ -243,12 +245,13 @@ def run_cross_entropy_model(IMG_SHAPE, PARAMS):
         validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
         epochs=PARAMS.TRAINING.CROSSENTROPY_EPOCHS,
         verbose=1,
+        batch_size=PARAMS.TRAINING.CROSSENTROPY_BATCH_SIZE,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.CROSSENTROPY_EARLY_STOP_ROUNDS)],
     )
     return model
 
 
-def run_siamsese_model(IMG_SHAPE, PARAMS):
+def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     model = tf_models.build_siamese_model(IMG_SHAPE, PARAMS)
     (pairs, labels) = utils.load(
         os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_pairs.pkl')
@@ -276,6 +279,7 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
         [pairs_train_l, pairs_train_r], labels_train,
         validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
         epochs=PARAMS.TRAINING.EPOCHS,
+        batch_size=PARAMS.TRAINING.BATCH_SIZE,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
     )
@@ -285,8 +289,8 @@ def run_siamsese_model(IMG_SHAPE, PARAMS):
 
 
 
-def run_triplet_model(IMG_SHAPE, PARAMS):
-    model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
+def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
+    model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS, embedding_model=embedding_model)
     triplets = utils.load(
         os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets.pkl')
     )
@@ -332,7 +336,7 @@ def run_triplet_model(IMG_SHAPE, PARAMS):
 
 
 
-def run_quadruplet_model(IMG_SHAPE, PARAMS):
+def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     model = tf_models.build_quadruplet_model(IMG_SHAPE, PARAMS)
     quadruplets = utils.load(
         os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_quadruplets.pkl')
@@ -400,21 +404,25 @@ if __name__ == '__main__':
         test_p = np.array([triplet[1] for triplet in triplets_test])
         test_n = np.array([triplet[2] for triplet in triplets_test])
 
-        embedding_layers = model.layers[:-1]
-        embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
+        pretrained_embedding_layers = model.layers[:-1]
+        pretrained_embedding_model = transfer_embedding_layers(pretrained_embedding_layers, IMG_SHAPE)
+        pretrained_embedding_model_seq = Sequential([Input(IMG_SHAPE)] + pretrained_embedding_layers)
 
-        dist_test_crossentropy, labels_test_crossentropy = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
+        dist_test_crossentropy, labels_test_crossentropy = compute_labelled_distances(
+            pretrained_embedding_model, test_a, test_p, test_n
+        )
         crossentropy_EER = calculate_EER(dist_test_crossentropy, labels_test_crossentropy)
-        logging.info("<<<< Cross-entropy pretrain EER: {EER} >>>>...".format(EER=crossentropy_EER))
-
+        logging.info("<<<< Cross-entropy pre-train EER: {EER} >>>>...".format(EER=crossentropy_EER))
+    else:
+        pretrained_embedding_model_seq = None
 
     ####  build model  ####
     if PARAMS.MODEL.LOSS_TYPE == 'contrastive':
-        dist_test, labels_test = run_siamsese_model(IMG_SHAPE, PARAMS)
+        dist_test, labels_test = run_siamsese_model(IMG_SHAPE, PARAMS, pretrained_embedding_model_seq)
     if PARAMS.MODEL.LOSS_TYPE == 'triplet':
-        dist_test, labels_test = run_triplet_model(IMG_SHAPE, PARAMS)
+        dist_test, labels_test = run_triplet_model(IMG_SHAPE, PARAMS, pretrained_embedding_model_seq)
     if PARAMS.MODEL.LOSS_TYPE == 'quadruplet':
-        dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS)
+        dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS. pretrained_embedding_model_seq)
 
     ####  Find EER   ####
     EER = calculate_EER(dist_test, labels_test)
