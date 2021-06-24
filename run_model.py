@@ -52,7 +52,7 @@ def set_optimizer(OPTIMIZER, LEARNING_RATE, LEARNING_DECAY_RATE, LEARNING_DECAY_
         )
     elif OPTIMIZER == 'nadam':
         opt = Nadam(
-            learning_rate=lr_schedule, 
+            learning_rate=LEARNING_RATE, 
             beta_1=BETA_1,
             beta_2=BETA_2,
         )
