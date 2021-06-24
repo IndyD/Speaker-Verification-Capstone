@@ -12,7 +12,7 @@ from sklearn.metrics import roc_curve
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Input
 from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.optimizers import Adam, SGD
+from tensorflow.keras.optimizers import Adam, SGD, Adamax, Nadam
 from tensorflow.keras.optimizers.schedules import ExponentialDecay
 
 import generate_data
@@ -24,46 +24,37 @@ import pdb
 logging.basicConfig(level=logging.DEBUG)
 
 
-def set_optimizer(PARAMS):
+def set_optimizer(OPTIMIZER, LEARNING_RATE, LEARNING_DECAY_RATE, LEARNING_DECAY_STEPS, MOMENTUM, BETA_1, BETA_2):
     lr_schedule = ExponentialDecay(
-        PARAMS.TRAINING.LEARNING_RATE,
-        decay_steps=PARAMS.TRAINING.LEARNING_DECAY_STEPS,
-        decay_rate=PARAMS.TRAINING.LEARNING_DECAY_RATE,
+        LEARNING_RATE,
+        decay_steps=LEARNING_DECAY_STEPS,
+        decay_rate=LEARNING_DECAY_RATE,
         staircase=False
     )
 
-    if PARAMS.TRAINING.OPTIMIZER == 'adam':
+    if OPTIMIZER == 'adam':
         opt = Adam(
             learning_rate=lr_schedule, 
+            beta_1=BETA_1,
+            beta_2=BETA_2,
         )
         print(1)
-    elif PARAMS.TRAINING.OPTIMIZER == 'sgd':
+    elif OPTIMIZER == 'sgd':
         opt = SGD(
             learning_rate=lr_schedule, 
-            momentum=PARAMS.TRAINING.MOMENTUM
+            momentum=MOMENTUM
         )
-    else:
-        raise ValueError('ERROR: Invalid PARAMS.TRAINING.OPTIMIZER argument!')
-
-    return opt
-
-def set_crossentropy_optimizer(PARAMS):
-    lr_schedule = ExponentialDecay(
-        PARAMS.TRAINING.CROSSENTROPY_LEARNING_RATE,
-        decay_steps=PARAMS.TRAINING.CROSSENTROPY_LEARNING_DECAY_STEPS,
-        decay_rate=PARAMS.TRAINING.CROSSENTROPY_LEARNING_DECAY_RATE,
-        staircase=False
-    )
-
-    if PARAMS.TRAINING.CROSSENTROPY_OPTIMIZER == 'adam':
-        opt = Adam(
+    elif OPTIMIZER == 'adamax':
+        opt = Adamax(
             learning_rate=lr_schedule, 
+            beta_1=BETA_1,
+            beta_2=BETA_2,
         )
-        print(1)
-    elif PARAMS.TRAINING.CROSSENTROPY_OPTIMIZER == 'sgd':
-        opt = SGD(
+    elif OPTIMIZER == 'nadam':
+        opt = Nadam(
             learning_rate=lr_schedule, 
-            momentum=PARAMS.TRAINING.CROSSENTROPY_MOMENTUM
+            beta_1=BETA_1,
+            beta_2=BETA_2,
         )
     else:
         raise ValueError('ERROR: Invalid PARAMS.TRAINING.OPTIMIZER argument!')
@@ -178,8 +169,17 @@ def train_triplet_model(model, triplets, PARAMS):
     train_p = np.array([triplet[1] for triplet in triplets_train])
     train_n = np.array([triplet[2] for triplet in triplets_train])
 
+    opt = set_optimizer(
+        OPTIMIZER=PARAMS.TRAINING.OPTIMIZER, 
+        LEARNING_RATE=PARAMS.TRAINING.LEARNING_RATE, 
+        LEARNING_DECAY_RATE=PARAMS.TRAINING.LEARNING_DECAY_RATE, 
+        LEARNING_DECAY_STEPS=PARAMS.TRAINING.LEARNING_DECAY_STEPS, 
+        MOMENTUM=PARAMS.TRAINING.MOMENTUM, 
+        BETA_1=PARAMS.TRAINING.BETA_1, 
+        BETA_2=PARAMS.TRAINING.BETA_2
+    )
     ####  compile and fit model  ####
-    model.compile(optimizer=set_optimizer(PARAMS))
+    model.compile(optimizer=opt)
     history = model.fit(
         [train_a, train_p, train_n],
         validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
@@ -203,8 +203,17 @@ def train_quadruplet_model(model, quadruplets, PARAMS):
     train_n1 = np.array([quadruplet[2] for quadruplet in quadruplets_train])
     train_n2 = np.array([quadruplet[3] for quadruplet in quadruplets_train])
 
+    opt = set_optimizer(
+        OPTIMIZER=PARAMS.TRAINING.OPTIMIZER, 
+        LEARNING_RATE=PARAMS.TRAINING.LEARNING_RATE, 
+        LEARNING_DECAY_RATE=PARAMS.TRAINING.LEARNING_DECAY_RATE, 
+        LEARNING_DECAY_STEPS=PARAMS.TRAINING.LEARNING_DECAY_STEPS, 
+        MOMENTUM=PARAMS.TRAINING.MOMENTUM, 
+        BETA_1=PARAMS.TRAINING.BETA_1, 
+        BETA_2=PARAMS.TRAINING.BETA_2
+    )
     ####  compile and fit model  ####
-    model.compile(optimizer=set_optimizer(PARAMS))
+    model.compile(optimizer=opt)
     history = model.fit(
         [train_a, train_p, train_n1, train_n2],
         validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
@@ -235,9 +244,18 @@ def run_cross_entropy_model(IMG_SHAPE, PARAMS):
 
     model = tf_models.build_crossentropy_model(n_classes, IMG_SHAPE, PARAMS)
 
+    opt = set_optimizer(
+        OPTIMIZER=PARAMS.TRAINING.CROSSENTROPY_OPTIMIZER, 
+        LEARNING_RATE=PARAMS.TRAINING.CROSSENTROPY_LEARNING_RATE, 
+        LEARNING_DECAY_RATE=PARAMS.TRAINING.CROSSENTROPY_LEARNING_DECAY_RATE, 
+        LEARNING_DECAY_STEPS=PARAMS.TRAINING.CROSSENTROPY_LEARNING_DECAY_STEPS, 
+        MOMENTUM=PARAMS.TRAINING.CROSSENTROPY_MOMENTUM, 
+        BETA_1=PARAMS.TRAINING.CROSSENTROPY_BETA_1, 
+        BETA_2=PARAMS.TRAINING.CROSSENTROPY_BETA_2
+    )
     model.compile(
         loss='sparse_categorical_crossentropy', 
-        optimizer=set_crossentropy_optimizer(PARAMS)
+        optimizer=opt
     )
     logging.info("Training cross-entropy model to pretrain for distnace metric models...")
 
@@ -270,10 +288,20 @@ def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     labels_test = tf.cast(np.array(labels_test), tf.float32)
 
     del pairs; del labels; del pairs_train; del pairs_test
+
+    opt = set_optimizer(
+        OPTIMIZER=PARAMS.TRAINING.OPTIMIZER, 
+        LEARNING_RATE=PARAMS.TRAINING.LEARNING_RATE, 
+        LEARNING_DECAY_RATE=PARAMS.TRAINING.LEARNING_DECAY_RATE, 
+        LEARNING_DECAY_STEPS=PARAMS.TRAINING.LEARNING_DECAY_STEPS, 
+        MOMENTUM=PARAMS.TRAINING.MOMENTUM, 
+        BETA_1=PARAMS.TRAINING.BETA_1, 
+        BETA_2=PARAMS.TRAINING.BETA_2
+    )
     ####  compile and fit model  ####
     model.compile(
         loss=tf_models.contrastive_loss_with_margin(margin=PARAMS.MODEL.MARGIN), 
-        optimizer=set_optimizer(PARAMS)
+        optimizer=opt
     )
     logging.info("Training contrastive pair model...")
 
