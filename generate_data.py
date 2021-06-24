@@ -244,7 +244,7 @@ if __name__ == "__main__":
         speaker_spectograms = utils.load(spectogram_path)
     
     ### Generate or contrastive pairs ###
-    if PARAMS.TRAINING.LOSS_TYPE == 'contrastive':
+    if PARAMS.MODEL.LOSS_TYPE == 'contrastive':
         if overwrite_datasets == 'T' or not os.path.isfile(pairs_path):
             logging.info("Generating pairs for contrastive loss...")
             pairs, labels = make_contrastive_pairs(
@@ -254,7 +254,7 @@ if __name__ == "__main__":
             utils.save((pairs, labels), pairs_path)
 
     ### Generate or contrastive triplets ###
-    if PARAMS.TRAINING.LOSS_TYPE == 'triplet':
+    if PARAMS.MODEL.LOSS_TYPE == 'triplet':
         if overwrite_datasets == 'T' or not os.path.isfile(triplets_path):
             logging.info("Generating triplets for triplet loss...")
             triplets = make_contrastive_triplets(
@@ -264,7 +264,7 @@ if __name__ == "__main__":
             utils.save(triplets, triplets_path)
 
     ### Generate or contrastive quadruplets ###
-    if PARAMS.TRAINING.LOSS_TYPE == 'quadruplet':
+    if PARAMS.MODEL.LOSS_TYPE == 'quadruplet':
         if overwrite_datasets == 'T' or not os.path.isfile(quadruplets_path):
             logging.info("Generating quadruplets for quadruplet loss...")
             quadruplets = make_contrastive_quadruplets(

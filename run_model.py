@@ -231,6 +231,7 @@ def run_cross_entropy_model(IMG_SHAPE, PARAMS):
 
     X = np.array(X)
     y = np.array(y)
+    del speaker_spectograms
 
     model = tf_models.build_crossentropy_model(n_classes, IMG_SHAPE, PARAMS)
 
@@ -268,6 +269,7 @@ def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     labels_train = tf.cast(np.array(labels_train), tf.float32)
     labels_test = tf.cast(np.array(labels_test), tf.float32)
 
+    del pairs; del labels; del pairs_train; del pairs_test
     ####  compile and fit model  ####
     model.compile(
         loss=tf_models.contrastive_loss_with_margin(margin=PARAMS.MODEL.MARGIN), 
@@ -382,8 +384,50 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
 
 
+
+def pretrain_model(IMG_SHAPE, PARAMS):
+    model = run_cross_entropy_model(IMG_SHAPE, PARAMS)
+    triplet_path = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets.pkl')
+
+    if not os.path.isfile(triplet_path):
+        speaker_spectrograms = utils.load(
+            os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'speaker_spectograms.pkl')
+        )
+        triplets = generate_data.make_contrastive_triplets(
+            speaker_spectrograms, 
+            PARAMS.DATA_GENERATOR.N_SAMPLES,
+        )
+        utils.save(triplets, triplet_path)
+    else:
+        triplets = utils.load(triplet_path)
+
+    random.shuffle(triplets)
+    test_split = int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
+    triplets_test = triplets[:test_split]
+
+    test_a = np.array([triplet[0] for triplet in triplets_test])
+    test_p = np.array([triplet[1] for triplet in triplets_test])
+    test_n = np.array([triplet[2] for triplet in triplets_test])
+
+    pretrained_embedding_layers = model.layers[:-1]
+    pretrained_embedding_model = transfer_embedding_layers(pretrained_embedding_layers, IMG_SHAPE)
+    pretrained_embedding_model_seq = Sequential([Input(IMG_SHAPE)] + pretrained_embedding_layers)
+
+    dist_test_crossentropy, labels_test_crossentropy = compute_labelled_distances(
+        pretrained_embedding_model, test_a, test_p, test_n
+    )
+    crossentropy_EER = calculate_EER(dist_test_crossentropy, labels_test_crossentropy)
+    logging.info("<<<< Cross-entropy pre-train EER: {EER} >>>>...".format(EER=crossentropy_EER))
+
+    return pretrained_embedding_model_seq
+
+
+
+
 if __name__ == '__main__':
     PARAMS = utils.config_init(sys.argv)
+    print('#'*80)
+    print('<<<< Config parameters:{p}'.format(p=PARAMS))
     IMG_SHAPE = (
         PARAMS.DATA_GENERATOR.N_MELS,
         PARAMS.DATA_GENERATOR.MAX_FRAMES,
@@ -391,28 +435,7 @@ if __name__ == '__main__':
     )
 
     if PARAMS.MODEL.CROSSENTROPY_PRETRAIN == 'T':
-        model = run_cross_entropy_model(IMG_SHAPE, PARAMS)
-
-        triplets = utils.load(
-            os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets.pkl')
-        )
-        random.shuffle(triplets)
-        test_split = int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
-        triplets_test = triplets[:test_split]
-
-        test_a = np.array([triplet[0] for triplet in triplets_test])
-        test_p = np.array([triplet[1] for triplet in triplets_test])
-        test_n = np.array([triplet[2] for triplet in triplets_test])
-
-        pretrained_embedding_layers = model.layers[:-1]
-        pretrained_embedding_model = transfer_embedding_layers(pretrained_embedding_layers, IMG_SHAPE)
-        pretrained_embedding_model_seq = Sequential([Input(IMG_SHAPE)] + pretrained_embedding_layers)
-
-        dist_test_crossentropy, labels_test_crossentropy = compute_labelled_distances(
-            pretrained_embedding_model, test_a, test_p, test_n
-        )
-        crossentropy_EER = calculate_EER(dist_test_crossentropy, labels_test_crossentropy)
-        logging.info("<<<< Cross-entropy pre-train EER: {EER} >>>>...".format(EER=crossentropy_EER))
+        pretrained_embedding_model_seq = pretrain_model(IMG_SHAPE, PARAMS)
     else:
         pretrained_embedding_model_seq = None
 
@@ -427,9 +450,7 @@ if __name__ == '__main__':
     ####  Find EER   ####
     EER = calculate_EER(dist_test, labels_test)
 
-    print('#'*80)
-    print('Config parameters:')
-    pprint.pprint(PARAMS)
+
     print('-'*60)
     print('<<<<<  The EER is:  {EER} !  >>>>>'.format(EER=EER))
     print('#'*80)
