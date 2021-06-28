@@ -15,7 +15,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.optimizers import Adam, SGD, Adamax, Nadam
 from tensorflow.keras.optimizers.schedules import ExponentialDecay
 
-import generate_data
+import generate_datasets
 import tf_models
 import utils
 
@@ -23,6 +23,15 @@ import pdb
 
 logging.basicConfig(level=logging.DEBUG)
 
+
+def test_train_val_split(items, test_split, val_split, seed=123):
+    random.Random(seed).shuffle(items)
+    test_split_idx = int(len(items) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
+    val_split_idx = int(len(items) * PARAMS.DATA_GENERATOR.TEST_SPLIT * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT)
+    test = items[:test_split_idx]
+    validation = items[test_split_idx:val_split_idx]
+    train = items[val_split_idx:]
+    return train, test, validation
 
 def set_optimizer(OPTIMIZER, LEARNING_RATE, LEARNING_DECAY_RATE, LEARNING_DECAY_STEPS, MOMENTUM, BETA_1, BETA_2):
     lr_schedule = ExponentialDecay(
@@ -98,7 +107,7 @@ def mine_triplets(embedding_model, PARAMS):
     semihard_triplets = []
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
-    positive_pair_locs = generate_data.find_positive_pairs(speaker_spectograms)
+    positive_pair_locs = generate_datasets.find_positive_pairs(speaker_spectograms)
 
     i = PARAMS.DATA_GENERATOR.N_SAMPLES
 
@@ -108,7 +117,7 @@ def mine_triplets(embedding_model, PARAMS):
         idx1 = positive_pair_locs[i][1]
         idx2 = positive_pair_locs[i][2]
 
-        negative = generate_data.find_random_negative(speaker_spectograms, spkr)
+        negative = generate_datasets.find_random_negative(speaker_spectograms, spkr)
         cand_triplet = (speaker_spectograms[spkr][idx1], speaker_spectograms[spkr][idx2], negative)
         input_a = np.expand_dims(cand_triplet[0], axis=0)
         input_p = np.expand_dims(cand_triplet[1], axis=0)
@@ -125,7 +134,7 @@ def mine_quadruplets(embedding_model, PARAMS):
     semihard_quadruplets = []
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
-    positive_pair_locs = generate_data.find_positive_pairs(speaker_spectograms)
+    positive_pair_locs = generate_datasets.find_positive_pairs(speaker_spectograms)
 
     i = PARAMS.DATA_GENERATOR.N_SAMPLES
 
@@ -135,7 +144,7 @@ def mine_quadruplets(embedding_model, PARAMS):
         idx1 = positive_pair_locs[i][1]
         idx2 = positive_pair_locs[i][2]
 
-        negativeA, negativeB = generate_data.find_two_random_negatives(speaker_spectograms, spkr)
+        negativeA, negativeB = generate_datasets.find_two_random_negatives(speaker_spectograms, spkr)
 
         cand_quadruplet = (
             speaker_spectograms[spkr][idx1], 
@@ -159,10 +168,9 @@ def mine_quadruplets(embedding_model, PARAMS):
 
 def train_triplet_model(model, triplets, PARAMS):
     ## train-test split
-    random.shuffle(triplets)
-    test_split = int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
-    triplets_test = triplets[:test_split]
-    triplets_train = triplets[test_split:]
+    triplets_train, triplets_test, triplets_val = test_train_val_split(
+        triplets, PARAMS.DATA_GENERATOR.TEST_SPLIT, PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
+    )
 
     ####  split and normalize the spectograms  ####
     train_a = np.array([triplet[0] for triplet in triplets_train])
@@ -192,10 +200,9 @@ def train_triplet_model(model, triplets, PARAMS):
 
 def train_quadruplet_model(model, quadruplets, PARAMS):
     ## train-test split
-    random.shuffle(quadruplets)
-    test_split = int(len(quadruplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
-    quadruplets_test = quadruplets[:test_split]
-    quadruplets_train = quadruplets[test_split:]
+    quadruplets_train, quadruplets_test, quadruplets_val = test_train_val_split(
+        quadruplets, PARAMS.DATA_GENERATOR.TEST_SPLIT, PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
+    )
 
     ####  split and normalize the spectograms  ####
     train_a = np.array([quadruplet[0] for quadruplet in quadruplets_train])
@@ -272,22 +279,51 @@ def run_cross_entropy_model(IMG_SHAPE, PARAMS):
 
 def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     model = tf_models.build_siamese_model(IMG_SHAPE, PARAMS)
+    val_size = PARAMS.DATA_GENERATOR.VALIDATION_SPLIT / (1.0 - PARAMS.DATA_GENERATOR.TEST_SPLIT)
     (pairs, labels) = utils.load(
         os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_pairs.pkl')
     )
     pairs_train, pairs_test, labels_train, labels_test = train_test_split(
         pairs, labels, test_size=PARAMS.DATA_GENERATOR.TEST_SPLIT, random_state=123
     )
+    pairs_train, pairs_val, labels_train, labels_val = train_test_split(
+        pairs_train, labels_train, test_size=val_size, random_state=123
+    )
+
 
     ####  split and normalize the spectograms  ####
     pairs_train_l = np.array([pair[0] for pair in pairs_train])
     pairs_train_r = np.array([pair[1] for pair in pairs_train])
     pairs_test_l = np.array([pair[0] for pair in pairs_test])
     pairs_test_r = np.array([pair[1] for pair in pairs_test])
+    pairs_val_l = np.array([pair[0] for pair in pairs_val])
+    pairs_val_r = np.array([pair[1] for pair in pairs_val])
     labels_train = tf.cast(np.array(labels_train), tf.float32)
     labels_test = tf.cast(np.array(labels_test), tf.float32)
+    labels_val = tf.cast(np.array(labels_val), tf.float32)
 
-    del pairs; del labels; del pairs_train; del pairs_test
+    def load_data(input_pair):
+        img1 = pickle.load(open(input_pair[0], "rb"))
+        img2 = pickle.load(open(input_pair[1], "rb"))
+
+        audio_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.AUDIO_DIR)
+        ## check if the speaker id paths match to generate the label
+        if input_pair[0].split(audio_dir)[1].split('/')[0] == input_pair[1].split(audio_dir)[1].split('/')[0]:
+            label = tf.cast([1], tf.int32)
+        else:
+            label = tf.cast([0], tf.int32)
+        return img1, img2, label
+
+    pdb.set_trace()
+
+    train_dataset = tf.data.Dataset.from_tensor_slices(pairs_train)
+    train_dataset = train_dataset.map(lambda x: tf.py_function(func=load_data, inp=[x], Tout=(tf.float32, tf.float32, tf.int32)))
+
+    val_dataset = tf.data.Dataset.from_tensor_slices(pairs_val)
+    val_dataset = val_dataset.map(lambda x: tf.py_function(func=load_data, inp=[x], Tout=(tf.float32, tf.float32, tf.int32)))
+
+    pdb.set_trace()
+
 
     opt = set_optimizer(
         OPTIMIZER=PARAMS.TRAINING.OPTIMIZER, 
@@ -306,7 +342,7 @@ def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     logging.info("Training contrastive pair model...")
 
     history = model.fit(
-        [pairs_train_l, pairs_train_r], labels_train,
+        train_dataset, labels_train,
         validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
         epochs=PARAMS.TRAINING.EPOCHS,
         batch_size=PARAMS.TRAINING.BATCH_SIZE,
@@ -421,7 +457,7 @@ def pretrain_model(IMG_SHAPE, PARAMS):
         speaker_spectrograms = utils.load(
             os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'speaker_spectograms.pkl')
         )
-        triplets = generate_data.make_contrastive_triplets(
+        triplets = generate_datasets.make_contrastive_triplets(
             speaker_spectrograms, 
             PARAMS.DATA_GENERATOR.N_SAMPLES,
         )

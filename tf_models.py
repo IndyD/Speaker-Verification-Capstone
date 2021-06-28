@@ -25,6 +25,23 @@ def contrastive_loss_with_margin(margin):
         return K.mean(y_true * square_pred + (1 - y_true) * margin_square)
     return contrastive_loss
 
+'''
+class ContrastiveLossLayer(Layer):
+    def __init__(self, margin, **kwargs):
+        self.margin = margin
+        super(ContrastiveLossLayer, self).__init__(**kwargs)
+    
+    def contrastive_loss(self, inputs):
+        img_l, img_r, y = inputs
+        img_dist = K.sum(K.square(img_l-img_r), axis=-1)
+        return K.sum(K.maximum(y * img_dist + (self.margin - img_dist) * (1-y), 0), axis=0)
+    
+    def call(self, inputs):
+        loss = self.contrastive_loss(inputs)
+        self.add_loss(loss)
+        return loss
+'''
+
 
 class TripletLossLayer(Layer):
     def __init__(self, margin, **kwargs):
@@ -116,6 +133,28 @@ def build_siamese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     distance = Lambda(euclidean_distance)([featsA, featsB])
     siamese_vgg7_model = Model(inputs=[imgA, imgB], outputs=distance)
     return siamese_vgg7_model
+
+
+def build_siamese_model_new(IMG_SHAPE, PARAMS, embedding_model=None):
+    ''' Build a triplet vgg7 model that computes the distance between
+    an anchor image, a positive image, and a negative image '''
+    if not embedding_model:
+        embedding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
+    embedding_model.add(Lambda(lambda x: K.l2_normalize(x,axis=-1)))
+    
+    input_l = Input(IMG_SHAPE, name="input_l")
+    input_r = Input(IMG_SHAPE, name="input_r")
+    
+    # Generate the encodings (feature vectors) for the three images
+    encoded_l = embedding_model(input_l)
+    encoded_r = embedding_model(input_r)
+    
+    #TripletLoss Layer
+    loss_layer = ContrastiveLossLayer(margin=PARAMS.MODEL.MARGIN,name='contrastive_loss_layer')([encoded_l, encoded_r, encoded_n])
+    
+    # Connect the inputs with the outputs
+    triplet_model = Model(inputs=[anchor_input,positive_input,negative_input],outputs=loss_layer)
+    return triplet_model
 
 
 def build_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):

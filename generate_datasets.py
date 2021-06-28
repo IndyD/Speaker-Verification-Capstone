@@ -5,99 +5,18 @@ import os
 import pickle
 import random
 import sys
+
+import tensorflow as tf
+import numpy as np
+
 from collections import namedtuple, defaultdict
 
-import numpy as np
 import utils 
 
 import pdb
 logging.basicConfig(level=logging.INFO)
 
 
-
-def listdir_no_hidden(input):
-    """ Lists files in a dir, ignoring hidden files that can cause issues """
-    dirlist = os.listdir(input)
-    dirlist = [dir for dir in dirlist if not dir.startswith('.')]
-    return dirlist
-
-def get_biggest_file(speech_session_dir):
-    """
-    For each speaker, we want to choose only one utterance or else the model
-    will learn to classify using the background noise. This fn chooses the 
-    biggest utterance for each speech session to ensure there is enough audio
-    """
-    wav_sizes = []
-    audio_files = listdir_no_hidden(speech_session_dir)
-    wavs = [audio_file for audio_file in audio_files if audio_file.endswith('.wav')]
-    for wav in wavs:
-        wav_path = os.path.join(speech_session_dir, wav)
-        wav_sizes.append( (wav_path, os.path.getsize(wav_path)) )
-    
-    wav_sizes.sort(key=lambda tup: tup[1], reverse=True)
-
-    if len(wav_sizes) == 0:
-        return None
-    else:
-        return wav_sizes[0][0]
-
-def generate_spectogram(wavpath, params):
-    """
-    Take one file and generate a spectram for it 
-    """
-    y, sr = librosa.load(wavpath)
-    S = librosa.feature.melspectrogram(
-        y, 
-        sr, ## 22050 Hz
-        n_fft=params.DATA_GENERATOR.N_FFT, ## recommended by librosa for speech, results in 23ms frames @22050
-        n_mels=params.DATA_GENERATOR.N_MELS, ## too many mels resulted in empty banks
-        win_length=params.DATA_GENERATOR.WIN_LENGTH, 
-        hop_length=params.DATA_GENERATOR.HOP_LENGTH, ## tried to do 10 ms step as per VGGVox
-    )
-    log_S = librosa.power_to_db(S, ref=np.max)
-
-    return log_S
-
-def trim_spectogram(spect, params):
-    """
-    Trims spectograms so they are all the same length, if too short return None
-    """
-    if spect.shape[1] < params.DATA_GENERATOR.MAX_FRAMES:
-        return None
-    else:
-        return spect[:,:params.DATA_GENERATOR.MAX_FRAMES]
-
-def generate_spectograms(audio_dir, spectogram_path, params):
-    """
-    Iteratively go thorugh each speaker dir, speech session dir, find the biggest
-    utterance per speech session, convert that to a trimmed spectogram, and store in dict
-    """
-    speaker_spectograms = defaultdict(list)
-
-    speaker_dirs = listdir_no_hidden(audio_dir)
-    for i, speaker in enumerate(speaker_dirs):
-        if i % 50 == 25:
-            logging.info('{i} of {n} speakers complete...'.format(i=i, n=len(speaker_dirs)))
-
-        logging.debug('Generating spectograms for speaker: {sp}'.format(sp=speaker))
-        speaker_dir = os.path.join(audio_dir, speaker)
-        speech_session_dirs = listdir_no_hidden(speaker_dir)
-
-        for speech_session in speech_session_dirs:
-            speech_session_dir = os.path.join(speaker_dir, speech_session)
-            utterance = get_biggest_file(speech_session_dir)
-            if not utterance:
-                continue
-            spect = generate_spectogram(utterance, params)
-            spect = trim_spectogram(spect, params)
-            spect = spect / -80.0 ##normalize 
-            ## Add an extra channel so the CNN works
-            spect = np.expand_dims(spect, axis=-1)
-
-            if spect is not None:
-                speaker_spectograms[speaker].append(spect)
-
-    return speaker_spectograms
 
 def find_positive_pairs(corpus_data):
     """ Find the positions of all possible positive pairs, 
@@ -122,18 +41,16 @@ def find_negative_pair(corpus_data):
     spk1 = random.choice(list(corpus_data.keys()))
     spk2 = random.choice([spk for spk in corpus_data.keys() if spk != spk1])
 
-    spk1_data = random.choice(corpus_data[spk1])
-    spk2_data = random.choice(corpus_data[spk2])
+    spk1_idx = random.choice(list(enumerate(corpus_data[spk1])))[0]
+    spk2_idx = random.choice(list(enumerate(corpus_data[spk2])))[0]
 
     speakers = (spk1, spk2)
-    data = (spk1_data, spk2_data)
+    data = ((spk1, spk1_idx), (spk2, spk2_idx), [0])
 
     return speakers, data
 
 def make_contrastive_pairs(corpus_data, n_pairs):
-    pair_data = []
-    pair_labels = []
-    
+    pair_data = []    
     positive_pair_locs = find_positive_pairs(corpus_data)
 
     ## keep the data balanced
@@ -143,13 +60,12 @@ def make_contrastive_pairs(corpus_data, n_pairs):
         raise ValueError('Choosing an N_SAMPLES that is higher than possible with the data! Choose a smaller value!')
 
     if len(positive_pair_locs) > int(n_pairs / 2):
-        positive_pair_locs = positive_pair_locs[0:int(n_pairs / 2)]        
+        positive_pair_locs = positive_pair_locs[0:int(n_pairs / 2)]
 
     for loc in positive_pair_locs:
         pair_data.append(
-            (corpus_data[loc[0]][loc[1]], corpus_data[loc[0]][loc[2]])
+            ((loc[0], loc[1]), (loc[0], loc[2]), [1])
         )
-        pair_labels.append([1])
     
     ## This ensures the same speaker pairs can't be considered more than twice (reverse is possible)
     neg_speaks = set([])
@@ -158,9 +74,8 @@ def make_contrastive_pairs(corpus_data, n_pairs):
         if speakers not in neg_speaks:
             neg_speaks.add(speakers)
             pair_data.append(data)
-            pair_labels.append([0])
 
-    return pair_data, pair_labels
+    return pair_data
 
 def find_random_negative(corpus_data, exclude):
     candidates = [cand for cand in corpus_data if cand != exclude]
@@ -218,47 +133,67 @@ def make_contrastive_quadruplets(corpus_data, n_quadruplets):
     return quadruplets
 
 
+
+def _bytes_feature(value):
+    """Returns a bytes_list from a string / byte."""
+    if isinstance(value, type(tf.constant(0))):
+        value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+def write_siamese_dataset(pairs, pairs_path, speaker_spectrograms):
+    print('Writing', pairs_path)
+    writer = tf.io.TFRecordWriter(pairs_path)
+    for pair_data in pairs:
+        spect1 = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]].tobytes()
+        spect2 = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]].tobytes()
+        label = np.array(pair_data[2]).tobytes()
+
+        example = tf.train.Example(
+            features=tf.train.Features(
+                feature={
+                    'spect1': _bytes_feature(spect1),
+                    'spect2': _bytes_feature(spect2),
+                    'label': _bytes_feature(label)
+                }
+            )
+        )
+        print('writing')
+        writer.write(example.SerializeToString())
+    writer.close()
+
 if __name__ == "__main__":
-    import librosa  
-    import librosa.display
-	
     ### Set variables from config file ###
     PARAMS = utils.config_init(sys.argv)
     audio_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.AUDIO_DIR)
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
-    spectogram_path = os.path.join(output_dir, 'speaker_spectograms.pkl')
-    pairs_path = os.path.join(output_dir, 'contrastive_pairs.pkl')
-    triplets_path = os.path.join(output_dir, 'contrastive_triplets.pkl')
-    quadruplets_path = os.path.join(output_dir, 'contrastive_quadruplets.pkl')
-    overwrite_spect = PARAMS.DATA_GENERATOR.OVERWRITE_SPECT
+    spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms.pkl')
+    pairs_path = os.path.join(output_dir, 'contrastive_pairs.tfrecords')
+    triplets_path = os.path.join(output_dir, 'contrastive_triplets.tfrecords')
+    quadruplets_path = os.path.join(output_dir, 'contrastive_quadruplets.tfrecords')
     overwrite_datasets = PARAMS.DATA_GENERATOR.OVERWRITE_DATASETS
-
-    ### Generate or load spectograms ###
-    if overwrite_spect == 'T' or not os.path.isfile(spectogram_path):
-        logging.info("Generating spectograms...")
-        speaker_spectograms = generate_spectograms(audio_dir, spectogram_path, PARAMS)
-        utils.save(speaker_spectograms, spectogram_path)
-    else:
-        speaker_spectograms = utils.load(spectogram_path)
+    speaker_spectrograms = utils.load(spectrogram_path)
     
     ### Generate or contrastive pairs ###
     if PARAMS.MODEL.LOSS_TYPE == 'contrastive':
         if overwrite_datasets == 'T' or not os.path.isfile(pairs_path):
             logging.info("Generating pairs for contrastive loss...")
-            pairs, labels = make_contrastive_pairs(
-                speaker_spectograms, 
+            pairs = make_contrastive_pairs(
+                speaker_spectrograms, 
                 PARAMS.DATA_GENERATOR.N_SAMPLES
             )
-            utils.save((pairs, labels), pairs_path)
+
+            write_siamese_dataset(pairs, pairs_path, speaker_spectrograms)
+
+            utils.save(pairs, pairs_path)
 
     ### Generate or contrastive triplets ###
     if PARAMS.MODEL.LOSS_TYPE == 'triplet':
         if overwrite_datasets == 'T' or not os.path.isfile(triplets_path):
             logging.info("Generating triplets for triplet loss...")
             triplets = make_contrastive_triplets(
-                speaker_spectograms, 
+                speaker_spectrograms, 
                 PARAMS.DATA_GENERATOR.N_SAMPLES,
             )
             utils.save(triplets, triplets_path)
@@ -268,7 +203,7 @@ if __name__ == "__main__":
         if overwrite_datasets == 'T' or not os.path.isfile(quadruplets_path):
             logging.info("Generating quadruplets for quadruplet loss...")
             quadruplets = make_contrastive_quadruplets(
-                speaker_spectograms, 
+                speaker_spectrograms, 
                 PARAMS.DATA_GENERATOR.N_SAMPLES,
             )
             utils.save(quadruplets, quadruplets_path)

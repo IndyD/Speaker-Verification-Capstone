@@ -1,5 +1,6 @@
 import pickle 
 import json
+import os
 from collections import namedtuple
 
 def save(obj, obj_path):
@@ -10,6 +11,12 @@ def load(obj_path):
     with open(obj_path, 'rb') as fin:
         obj = pickle.load(fin)
     return obj
+
+def listdir_nohidden(input):
+    """ Lists files in a dir, ignoring hidden files that can cause issues """
+    dirlist = os.listdir(input)
+    dirlist = [dir for dir in dirlist if not dir.startswith('.')]
+    return dirlist
 
 def config_init(argv):
     ### Initialize config file ###
