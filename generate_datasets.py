@@ -1,4 +1,5 @@
 import itertools
+import glob
 import json
 import logging
 import os
@@ -132,34 +133,41 @@ def make_contrastive_quadruplets(corpus_data, n_quadruplets):
 
     return quadruplets
 
-
-
 def _bytes_feature(value):
     """Returns a bytes_list from a string / byte."""
     if isinstance(value, type(tf.constant(0))):
         value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
+
 def write_siamese_dataset(pairs, pairs_path, speaker_spectrograms):
     print('Writing', pairs_path)
-    writer = tf.io.TFRecordWriter(pairs_path)
-    for pair_data in pairs:
-        spect1 = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]].tobytes()
-        spect2 = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]].tobytes()
-        label = np.array(pair_data[2]).tobytes()
+    pdb.set_trace()
 
-        example = tf.train.Example(
-            features=tf.train.Features(
-                feature={
-                    'spect1': _bytes_feature(spect1),
-                    'spect2': _bytes_feature(spect2),
-                    'label': _bytes_feature(label)
-                }
+    with tf.io.TFRecordWriter('contrastive_pairs.tfrecord') as writer:
+        for pair_data in pairs:
+            spect1_b = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]].tobytes()
+            spect2_b = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]].tobytes()
+            label_b = np.array(pair_data[2]).tobytes()
+
+            example = tf.train.Example(
+                features=tf.train.Features(
+                    feature={
+                        'spect1': _bytes_feature(spect1_b),
+                        'spect2': _bytes_feature(spect2_b),
+                        'label': _bytes_feature(label_b)
+                    }
+                )
             )
-        )
-        print('writing')
-        writer.write(example.SerializeToString())
-    writer.close()
+            writer.write(example.SerializeToString())
+
+def set_data_dir(output_dir, loss_type):
+    data_dir = os.path.join(output_dir, loss_type)
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    for f in glob.glob(os.path.join(data_dir, '*')):
+        os.remove(f)
+    return data_dir
 
 if __name__ == "__main__":
     ### Set variables from config file ###
@@ -169,9 +177,9 @@ if __name__ == "__main__":
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
     spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms.pkl')
-    pairs_path = os.path.join(output_dir, 'contrastive_pairs.tfrecords')
-    triplets_path = os.path.join(output_dir, 'contrastive_triplets.tfrecords')
-    quadruplets_path = os.path.join(output_dir, 'contrastive_quadruplets.tfrecords')
+    pairs_path = 'contrastive_pairs.tfrecord'
+    triplets_path = 'contrastive_triplets.tfrecord'
+    quadruplets_path = 'contrastive_quadruplets.tfrecord'
     overwrite_datasets = PARAMS.DATA_GENERATOR.OVERWRITE_DATASETS
     speaker_spectrograms = utils.load(spectrogram_path)
     
@@ -184,8 +192,8 @@ if __name__ == "__main__":
                 PARAMS.DATA_GENERATOR.N_SAMPLES
             )
 
+            #data_dir = set_data_dir(output_dir, PARAMS.MODEL.LOSS_TYPE)
             write_siamese_dataset(pairs, pairs_path, speaker_spectrograms)
-
             utils.save(pairs, pairs_path)
 
     ### Generate or contrastive triplets ###
