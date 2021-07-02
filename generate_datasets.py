@@ -139,12 +139,13 @@ def _bytes_feature(value):
         value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
+def _int64_feature(value):
+  """Returns an int64_list from a bool / enum / int / uint."""
+  return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
 def write_siamese_dataset(pairs, pairs_path, speaker_spectrograms):
     print('Writing', pairs_path)
-    pdb.set_trace()
-
-    with tf.io.TFRecordWriter('contrastive_pairs.tfrecord') as writer:
+    with tf.io.TFRecordWriter(pairs_path) as writer:
         for pair_data in pairs:
             spect1_b = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]].tobytes()
             spect2_b = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]].tobytes()
@@ -177,7 +178,9 @@ if __name__ == "__main__":
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
     spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms.pkl')
-    pairs_path = 'contrastive_pairs.tfrecord'
+    pairs_path = os.path.join(output_dir, 'contrastive_pairs.pkl')
+    pairs_dataset_path = os.path.join(output_dir, 'contrastive_pairs.tfrecord')
+    
     triplets_path = 'contrastive_triplets.tfrecord'
     quadruplets_path = 'contrastive_quadruplets.tfrecord'
     overwrite_datasets = PARAMS.DATA_GENERATOR.OVERWRITE_DATASETS
@@ -193,7 +196,7 @@ if __name__ == "__main__":
             )
 
             #data_dir = set_data_dir(output_dir, PARAMS.MODEL.LOSS_TYPE)
-            write_siamese_dataset(pairs, pairs_path, speaker_spectrograms)
+            write_siamese_dataset(pairs, pairs_dataset_path, speaker_spectrograms)
             utils.save(pairs, pairs_path)
 
     ### Generate or contrastive triplets ###

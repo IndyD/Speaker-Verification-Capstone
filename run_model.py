@@ -481,7 +481,7 @@ def pretrain_model(IMG_SHAPE, PARAMS):
         pretrained_embedding_model, test_a, test_p, test_n
     )
     crossentropy_EER = calculate_EER(dist_test_crossentropy, labels_test_crossentropy)
-    logging.info("<<<< Cross-entropy pre-train EER: {EER} >>>>...".format(EER=crossentropy_EER))
+    print("<<<< Cross-entropy pre-train EER: {EER} >>>>...".format(EER=crossentropy_EER))
 
     return pretrained_embedding_model_seq
 
