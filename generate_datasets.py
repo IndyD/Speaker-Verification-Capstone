@@ -81,9 +81,8 @@ def make_contrastive_pairs(corpus_data, n_pairs):
 def find_random_negative(corpus_data, exclude):
     candidates = [cand for cand in corpus_data if cand != exclude]
     speaker_id = random.choice(candidates)
-    random_negative = random.choice(corpus_data[speaker_id])
-
-    return random_negative
+    random_negative = random.choice(range(len(corpus_data[speaker_id])))
+    return speaker_id, random_negative
 
 def make_contrastive_triplets(corpus_data, n_triplets):
     triplets = []
@@ -96,8 +95,8 @@ def make_contrastive_triplets(corpus_data, n_triplets):
         idx1 = positive_pair_locs[i][1]
         idx2 = positive_pair_locs[i][2]
 
-        negative = find_random_negative(corpus_data, spkr)
-        triplet = (corpus_data[spkr][idx1], corpus_data[spkr][idx2], negative)
+        neg_spkr, neg_idx = find_random_negative(corpus_data, spkr)
+        triplet = ((spkr, idx1), (spkr, idx2), (neg_spkr, neg_idx))
         triplets.append(triplet)
 
     return triplets
@@ -143,7 +142,27 @@ def _int64_feature(value):
   """Returns an int64_list from a bool / enum / int / uint."""
   return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
-def write_siamese_dataset(pairs, pairs_path, speaker_spectrograms):
+def write_datasets(items, data_type, output_dir, speaker_spectrograms, PARAMS):
+    items_train, items_test, items_val = utils.test_train_val_split(
+        items, PARAMS.DATA_GENERATOR.TEST_SPLIT, PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
+    )
+
+    train_path = os.path.join(output_dir, 'contrastive_' + data_type + '_train.tfrecord')
+    test_path = os.path.join(output_dir, 'contrastive_' + data_type + '_test.tfrecord')
+    val_path = os.path.join(output_dir, 'contrastive_' + data_type + '_val.tfrecord')
+
+    if data_type == 'pairs':
+        write_pairs_dataset(items_train, train_path, speaker_spectrograms)
+        write_pairs_dataset(items_test, test_path, speaker_spectrograms)
+        write_pairs_dataset(items_val, val_path, speaker_spectrograms)
+    elif data_type == 'triplets':
+        write_triplets_dataset(items_train, train_path, speaker_spectrograms)
+        write_triplets_dataset(items_test, test_path, speaker_spectrograms)
+        write_triplets_dataset(items_val, val_path, speaker_spectrograms)
+    else:
+        raise ValueError('Invalid datatype')
+
+def write_pairs_dataset(pairs, pairs_path, speaker_spectrograms):
     print('Writing', pairs_path)
     with tf.io.TFRecordWriter(pairs_path) as writer:
         for pair_data in pairs:
@@ -162,13 +181,24 @@ def write_siamese_dataset(pairs, pairs_path, speaker_spectrograms):
             )
             writer.write(example.SerializeToString())
 
-def set_data_dir(output_dir, loss_type):
-    data_dir = os.path.join(output_dir, loss_type)
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-    for f in glob.glob(os.path.join(data_dir, '*')):
-        os.remove(f)
-    return data_dir
+def write_triplets_dataset(triplets, triplets_path, speaker_spectrograms):
+    print('Writing', triplets_path)
+    with tf.io.TFRecordWriter(triplets_path) as writer:
+        for pair_data in triplets:
+            spectA_b = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]].tobytes()
+            spectP_b = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]].tobytes()
+            spectN_b = speaker_spectrograms[pair_data[2][0]][pair_data[2][1]].tobytes()
+
+            example = tf.train.Example(
+                features=tf.train.Features(
+                    feature={
+                        'spectA': _bytes_feature(spectA_b),
+                        'spectP': _bytes_feature(spectP_b),
+                        'spectN': _bytes_feature(spectN_b)
+                    }
+                )
+            )
+            writer.write(example.SerializeToString())
 
 if __name__ == "__main__":
     ### Set variables from config file ###
@@ -194,9 +224,7 @@ if __name__ == "__main__":
                 speaker_spectrograms, 
                 PARAMS.DATA_GENERATOR.N_SAMPLES
             )
-
-            #data_dir = set_data_dir(output_dir, PARAMS.MODEL.LOSS_TYPE)
-            write_siamese_dataset(pairs, pairs_dataset_path, speaker_spectrograms)
+            write_datasets(pairs, 'pairs', output_dir, speaker_spectrograms, PARAMS)
             utils.save(pairs, pairs_path)
 
     ### Generate or contrastive triplets ###
@@ -207,6 +235,7 @@ if __name__ == "__main__":
                 speaker_spectrograms, 
                 PARAMS.DATA_GENERATOR.N_SAMPLES,
             )
+            write_datasets(triplets, 'triplets', output_dir, speaker_spectrograms, PARAMS)
             utils.save(triplets, triplets_path)
 
     ### Generate or contrastive quadruplets ###

@@ -47,7 +47,6 @@ def set_optimizer(OPTIMIZER, LEARNING_RATE, LEARNING_DECAY_RATE, LEARNING_DECAY_
             beta_1=BETA_1,
             beta_2=BETA_2,
         )
-        print(1)
     elif OPTIMIZER == 'sgd':
         opt = SGD(
             learning_rate=lr_schedule, 
@@ -96,6 +95,25 @@ def compute_contrastive_embeddings(embedding_model, anchors, positives, negative
 
     return dist_p, dist_n
 
+def _decode_img(img_bytes, IMG_SHAPE):
+    img = tf.io.decode_raw(img_bytes, tf.float32)
+    img.set_shape([IMG_SHAPE[0] * IMG_SHAPE[1] * IMG_SHAPE[2]])
+    img = tf.reshape(img, IMG_SHAPE)
+    return img
+
+def _read_contrastive_tfrecord(serialized_example):
+    feature_description = {
+        'spectA': tf.io.FixedLenFeature((), tf.string),
+        'spectP': tf.io.FixedLenFeature((), tf.string),
+        'spectN': tf.io.FixedLenFeature((), tf.string),
+    }
+    example = tf.io.parse_single_example(serialized_example, feature_description)
+    
+    spectA = _decode_img(example['spectA'], IMG_SHAPE)
+    spectP = _decode_img(example['spectP'], IMG_SHAPE)
+    spectN = _decode_img(example['spectN'], IMG_SHAPE)
+
+    return (spectA , spectP, spectN)
 
 def compute_labelled_distances(embedding_model, anchors, positives, negatives):
     dist_p, dist_n = compute_contrastive_embeddings(embedding_model, anchors, positives, negatives)
@@ -166,16 +184,11 @@ def mine_quadruplets(embedding_model, PARAMS):
         i += 1
     return semihard_quadruplets
 
-def train_triplet_model(model, triplets, PARAMS):
-    ## train-test split
-    triplets_train, triplets_test, triplets_val = test_train_val_split(
-        triplets, PARAMS.DATA_GENERATOR.TEST_SPLIT, PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
-    )
-
-    ####  split and normalize the spectograms  ####
-    train_a = np.array([triplet[0] for triplet in triplets_train])
-    train_p = np.array([triplet[1] for triplet in triplets_train])
-    train_n = np.array([triplet[2] for triplet in triplets_train])
+def train_triplet_model(model, triplets_train, triplets_test, PARAMS, modifier=None):
+    ## train-test split the spectograms  ####
+    #train_a = np.array([triplet[0] for triplet in triplets_train])
+    #train_p = np.array([triplet[1] for triplet in triplets_train])
+    #train_n = np.array([triplet[2] for triplet in triplets_train])
 
     opt = set_optimizer(
         OPTIMIZER=PARAMS.TRAINING.OPTIMIZER, 
@@ -187,16 +200,19 @@ def train_triplet_model(model, triplets, PARAMS):
         BETA_2=PARAMS.TRAINING.BETA_2
     )
     ####  compile and fit model  ####
+    pdb.set_trace()
+
     model.compile(optimizer=opt)
     history = model.fit(
-        [train_a, train_p, train_n],
-        validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
+        #[train_a, train_p, train_n],
+        triplets_train,
+        #validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
         epochs=PARAMS.TRAINING.EPOCHS,
         batch_size=PARAMS.TRAINING.BATCH_SIZE,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
     )
-    return model, triplets_test
+    return model
 
 def train_quadruplet_model(model, quadruplets, PARAMS):
     ## train-test split
@@ -278,6 +294,7 @@ def run_cross_entropy_model(IMG_SHAPE, PARAMS):
 
 
 def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
+    '''
     model = tf_models.build_siamese_model(IMG_SHAPE, PARAMS)
     val_size = PARAMS.DATA_GENERATOR.VALIDATION_SPLIT / (1.0 - PARAMS.DATA_GENERATOR.TEST_SPLIT)
     (pairs, labels) = utils.load(
@@ -323,7 +340,14 @@ def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     val_dataset = val_dataset.map(lambda x: tf.py_function(func=load_data, inp=[x], Tout=(tf.float32, tf.float32, tf.int32)))
 
     pdb.set_trace()
-
+    '''
+    output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
+    train_file_path = os.path.join(output_dir, 'contrastive_pairs_train.tfrecord')
+    test_file_paths = os.path.join(output_dir, 'contrastive_pairs_test.tfrecord')
+    val_file_paths = os.path.join(output_dir, 'contrastive_pairs_val.tfrecord')
+    train_dataset = tf.data.TFRecordDataset([train_file_path])
+    test_dataset = tf.data.TFRecordDataset([test_file_paths])
+    val_dataset = tf.data.TFRecordDataset([val_file_paths])
 
     opt = set_optimizer(
         OPTIMIZER=PARAMS.TRAINING.OPTIMIZER, 
@@ -354,16 +378,30 @@ def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     return dist_test, labels_test
 
 
-
 def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS, embedding_model=embedding_model)
-    triplets = utils.load(
-        os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets.pkl')
-    )
+    #triplets = utils.load(
+    #    os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets.pkl')
+    #)
 
-    #### Initial training on all tripplets
+    output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
+    train_paths = os.path.join(output_dir, 'contrastive_triplets_train.tfrecord')
+    test_paths = os.path.join(output_dir, 'contrastive_triplets_test.tfrecord')
+    val_paths = os.path.join(output_dir, 'contrastive_triplets_val.tfrecord')
+
+    train_dataset = tf.data.TFRecordDataset([train_paths])
+    test_dataset = tf.data.TFRecordDataset([test_paths])
+    val_dataset = tf.data.TFRecordDataset([val_paths])
+    train_dataset = train_dataset.map(_read_contrastive_tfrecord)
+    test_dataset = test_dataset.map(_read_contrastive_tfrecord)
+    val_dataset = val_dataset.map(_read_contrastive_tfrecord)
+    train_dataset = train_dataset.batch(PARAMS.TRAINING.BATCH_SIZE).prefetch(3)
+    test_dataset = test_dataset.batch(PARAMS.TRAINING.BATCH_SIZE).prefetch(3)
+    val_dataset = val_dataset.batch(PARAMS.TRAINING.BATCH_SIZE).prefetch(3)
+
+    #### Initial training on all triplets
     logging.info("Training tripet loss model on all triplets...")
-    model, triplets_test = train_triplet_model(model, triplets, PARAMS)
+    model = train_triplet_model(model, train_dataset, test_dataset , PARAMS)
     embedding_layers = model.layers[3].layers
     embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
 
@@ -386,9 +424,9 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
         logging.info("Training tripet loss model on semi-hard triplets...")
         if PARAMS.TRAINING.SEMIHARD_FRESH_MODEL == 'T':
             model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
-            model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
+            model = train_triplet_model(model, semihard_triplets, PARAMS, modifier='_semihard')
         else:
-            model, _ = train_triplet_model(model, semihard_triplets, PARAMS)
+            model = train_triplet_model(model, semihard_triplets, PARAMS, modifier='_semihard')
 
         ####  Transfer learning- take final embedding layers and score pairs similarly to contrastive loss
         embedding_layers = model.layers[3].layers

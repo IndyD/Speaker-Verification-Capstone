@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 IMG_SHAPE = (130, 300, 1)
 
-file_paths = ['output/contrastive_pairs.tfrecord']
+file_paths = ['output/contrastive_triplets_test.tfrecord']
 tfrecord_dataset = tf.data.TFRecordDataset(file_paths)
 
 def _decode_img(img_bytes, IMG_SHAPE):
@@ -36,17 +36,17 @@ def _decode_img(img_bytes, IMG_SHAPE):
 
 def _read_contrastive_tfrecord(serialized_example):
     feature_description = {
-        'spect1': tf.io.FixedLenFeature((), tf.string),
-        'spect2': tf.io.FixedLenFeature((), tf.string),
-        'label': tf.io.FixedLenFeature((), tf.string),
+        'spectA': tf.io.FixedLenFeature((), tf.string),
+        'spectP': tf.io.FixedLenFeature((), tf.string),
+        'spectN': tf.io.FixedLenFeature((), tf.string),
     }
     example = tf.io.parse_single_example(serialized_example, feature_description)
     
-    spect1 = _decode_img(example['spect1'], IMG_SHAPE)
-    spect2 = _decode_img(example['spect2'], IMG_SHAPE)
-    label = tf.io.decode_raw(example['label'], tf.int64)
+    spectA = _decode_img(example['spectA'], IMG_SHAPE)
+    spectP = _decode_img(example['spectP'], IMG_SHAPE)
+    spectN = _decode_img(example['spectN'], IMG_SHAPE)
 
-    return spect1 , spect2, label
+    return spectA , spectP, spectN
 
 parsed_dataset = tfrecord_dataset.map(_read_contrastive_tfrecord)
 for data in parsed_dataset.take(2):
