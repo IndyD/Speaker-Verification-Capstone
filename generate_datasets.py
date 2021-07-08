@@ -184,7 +184,7 @@ def write_pairs_dataset(pairs, pairs_path, speaker_spectrograms):
 def write_triplets_dataset(triplets, triplets_path, speaker_spectrograms):
     print('Writing', triplets_path)
     with tf.io.TFRecordWriter(triplets_path) as writer:
-        for pair_data in triplets:
+        for i, pair_data in enumerate(triplets):
             spectA_b = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]].tobytes()
             spectP_b = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]].tobytes()
             spectN_b = speaker_spectrograms[pair_data[2][0]][pair_data[2][1]].tobytes()
@@ -209,10 +209,8 @@ if __name__ == "__main__":
         os.mkdir(output_dir)
     spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms.pkl')
     pairs_path = os.path.join(output_dir, 'contrastive_pairs.pkl')
-    pairs_dataset_path = os.path.join(output_dir, 'contrastive_pairs.tfrecord')
-    
-    triplets_path = 'contrastive_triplets.tfrecord'
-    quadruplets_path = 'contrastive_quadruplets.tfrecord'
+    triplets_path = os.path.join(output_dir, 'contrastive_triplets.pkl')
+    quadruplets_path = os.path.join(output_dir, 'contrastive_quadruplets.pkl')
     overwrite_datasets = PARAMS.DATA_GENERATOR.OVERWRITE_DATASETS
     speaker_spectrograms = utils.load(spectrogram_path)
     

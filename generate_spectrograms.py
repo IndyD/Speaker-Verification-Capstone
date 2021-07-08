@@ -36,7 +36,7 @@ def get_biggest_file(speech_session_dir):
     else:
         return wav_sizes[0][0]
 
-def generate_spectogram(wavpath, params):
+def generate_spectrogram(wavpath, params):
     """
     Take one file and generate a spectram for it 
     """
@@ -53,7 +53,7 @@ def generate_spectogram(wavpath, params):
 
     return log_S
 
-def trim_spectogram(spect, params):
+def trim_spectrogram(spect, params):
     """
     Trims spectograms so they are all the same length, if too short return None
     """
@@ -62,12 +62,12 @@ def trim_spectogram(spect, params):
     else:
         return spect[:,:params.DATA_GENERATOR.MAX_FRAMES]
 
-def generate_spectograms(audio_dir, spectogram_path, params):
+def generate_spectrograms(audio_dir, spectogram_path, params):
     """
     Iteratively go thorugh each speaker dir, speech session dir, find the biggest
     utterance per speech session, convert that to a trimmed spectogram, and store in dict
     """
-    speaker_spectograms = defaultdict(list)
+    speaker_spectrograms = defaultdict(list)
 
     speaker_dirs = utils.listdir_nohidden(audio_dir)
     for i, speaker in enumerate(speaker_dirs):
@@ -83,20 +83,20 @@ def generate_spectograms(audio_dir, spectogram_path, params):
             utterance = get_biggest_file(speech_session_dir)
             if not utterance:
                 continue
-            spect = generate_spectogram(utterance, params)
-            spect = trim_spectogram(spect, params)
+            spect = generate_spectrogram(utterance, params)
+            spect = trim_spectrogram(spect, params)
             spect = spect / -80.0 ##normalize 
             ## Add an extra channel so the CNN works
             spect = np.expand_dims(spect, axis=-1)
 
             if spect is not None:
-                speaker_spectograms[speaker].append(spect)
+                speaker_spectrograms[speaker].append(spect)
                 #spect_pkl = utterance.replace('.wav','.pkl')
                 #spect_path = os.path.join(os.path.dirname(__file__), spect_pkl)
-                #speaker_spectograms[speaker].append(spect_path)
+                #speaker_spectrograms[speaker].append(spect_path)
                 #utils.save(spect, spect_path)
 
-    return speaker_spectograms
+    return speaker_spectrograms
 
 
 if __name__ == "__main__":
@@ -109,11 +109,11 @@ if __name__ == "__main__":
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
-    spectogram_path = os.path.join(output_dir, 'speaker_spectograms.pkl')
+    spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms.pkl')
     overwrite_spect = PARAMS.DATA_GENERATOR.OVERWRITE_SPECT
 
     ### Generate or load spectograms ###
-    if overwrite_spect == 'T' or not os.path.isfile(spectogram_path):
+    if overwrite_spect == 'T' or not os.path.isfile(spectrogram_path):
         logging.info("Generating spectograms...")
-        speaker_spectograms = generate_spectograms(audio_dir, spectogram_path, PARAMS)
-        utils.save(speaker_spectograms, spectogram_path)
+        speaker_spectrograms = generate_spectrograms(audio_dir, spectrogram_path, PARAMS)
+        utils.save(speaker_spectrograms, spectrogram_path)
