@@ -7,8 +7,8 @@ import sys
 import tensorflow as tf
 import numpy as np
 
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_curve
+#from sklearn.model_selection import train_test_split
+#from sklearn.metrics import roc_curve
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Input
 from tensorflow.keras.callbacks import EarlyStopping
@@ -72,10 +72,11 @@ def set_optimizer(OPTIMIZER, LEARNING_RATE, LEARNING_DECAY_RATE, LEARNING_DECAY_
 def calculate_EER(dist, labels):
     # scale distances so EER works
     preds = dist / dist.max()
-    fpr, tpr, _ = roc_curve(labels, preds, pos_label=0)
-    fnr = 1 - tpr
-    EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
-    return EER
+    #fpr, tpr, _ = roc_curve(labels, preds, pos_label=0)
+    #fnr = 1 - tpr
+    #EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
+    #return EER
+    return None
 
 def transfer_embedding_layers(embedding_layers, IMG_SHAPE):
     img_input = Input(IMG_SHAPE)
