@@ -101,7 +101,7 @@ def _decode_img(img_bytes, IMG_SHAPE):
     img = tf.reshape(img, IMG_SHAPE)
     return img
 
-def _read_contrastive_tfrecord(serialized_example):
+def _read_triplet_tfrecord(serialized_example):
     feature_description = {
         'spectA': tf.io.FixedLenFeature((), tf.string),
         'spectP': tf.io.FixedLenFeature((), tf.string),
@@ -113,7 +113,13 @@ def _read_contrastive_tfrecord(serialized_example):
     spectP = _decode_img(example['spectP'], IMG_SHAPE)
     spectN = _decode_img(example['spectN'], IMG_SHAPE)
 
-    return spectA , spectP, spectN
+    output = {
+        "anchor_input": spectA,
+        "positive_input": spectP,
+        "negative_input": spectN
+    }
+    return output
+    #return spectA , spectP, spectN
 
 def compute_labelled_distances(embedding_model, anchors, positives, negatives):
     dist_p, dist_n = compute_contrastive_embeddings(embedding_model, anchors, positives, negatives)
@@ -184,16 +190,11 @@ def mine_quadruplets(embedding_model, PARAMS):
         i += 1
     return semihard_quadruplets
 
-def train_triplet_model(model, triplets_train, triplets_test, PARAMS, modifier=None):
+def train_triplet_model(model, train_dataset, val_dataset, PARAMS, modifier=None):
     ## train-test split the spectograms  ####
     #train_a = np.array([triplet[0] for triplet in triplets_train])
     #train_p = np.array([triplet[1] for triplet in triplets_train])
     #train_n = np.array([triplet[2] for triplet in triplets_train])
-    triplets_train = triplets_train
-
-    def _input_batch(triplets_train):
-        triplets_train = triplets_train.batch(PARAMS.TRAINING.BATCH_SIZE)#.prefetch(1)
-        return triplets_train
 
     opt = set_optimizer(
         OPTIMIZER=PARAMS.TRAINING.OPTIMIZER, 
@@ -211,8 +212,8 @@ def train_triplet_model(model, triplets_train, triplets_test, PARAMS, modifier=N
     history = model.fit(
         #[train_a, train_p, train_n],
         #triplets_train,
-        _input_batch(triplets_train),
-        #validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
+        train_dataset,
+        validation_data=val_dataset,
         epochs=PARAMS.TRAINING.EPOCHS,
         batch_size=PARAMS.TRAINING.BATCH_SIZE,
         verbose=1,
@@ -256,7 +257,7 @@ def train_quadruplet_model(model, quadruplets, PARAMS):
 
 def run_cross_entropy_model(IMG_SHAPE, PARAMS):
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
-    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
+    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectrograms.pkl'))
     n_classes = len(speaker_spectograms.keys())
     X = []
     y = []
@@ -397,14 +398,14 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
     test_dataset = tf.data.TFRecordDataset([test_paths])
     val_dataset = tf.data.TFRecordDataset([val_paths])
-    test_dataset = test_dataset.map(_read_contrastive_tfrecord)
-    val_dataset = val_dataset.map(_read_contrastive_tfrecord)
+    test_dataset = test_dataset.map(_read_triplet_tfrecord)
+    val_dataset = val_dataset.map(_read_triplet_tfrecord)
     test_dataset = test_dataset.batch(PARAMS.TRAINING.BATCH_SIZE).prefetch(1)
     val_dataset = val_dataset.batch(PARAMS.TRAINING.BATCH_SIZE).prefetch(1)
 
     train_dataset = tf.data.TFRecordDataset([train_paths])
-    train_dataset = train_dataset.map(_read_contrastive_tfrecord)
-    #train_dataset = train_dataset.batch(PARAMS.TRAINING.BATCH_SIZE)#.prefetch(1)
+    train_dataset = train_dataset.map(_read_triplet_tfrecord)
+    train_dataset = train_dataset.batch(PARAMS.TRAINING.BATCH_SIZE).prefetch(1)
 
     #### Initial training on all triplets
     logging.info("Training tripet loss model on all triplets...")

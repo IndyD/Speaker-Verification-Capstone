@@ -173,18 +173,21 @@ def _read_contrastive_tfrecord(serialized_example):
     #return [spectA , spectP, spectN]
 
 parsed_dataset = tfrecord_dataset.map(_read_contrastive_tfrecord)
-parsed_dataset = parsed_dataset.batch(20).prefetch(1)
+parsed_dataset = parsed_dataset.batch(30).prefetch(1)
 
 #pdb.set_trace()
 
 model = build_triplet_model(IMG_SHAPE)
 model.compile(optimizer='adam') #, run_eagerly=True)
-#history = model.fit( parsed_dataset )
+history = model.fit( parsed_dataset, batch_size=30, )
 
 train_a = np.array([triplet[0] for triplet in triplets])
 train_p = np.array([triplet[1] for triplet in triplets])
 train_n = np.array([triplet[2] for triplet in triplets])
 
+model2 = build_triplet_model(IMG_SHAPE)
+model2.compile(optimizer='adam') #, run_eagerly=True)
 ####  compile and fit model  ####
-history = model.fit(
-        [train_a, train_p, train_n])
+history = model2.fit(
+        [train_a, train_p, train_n],
+        batch_size=30,)
