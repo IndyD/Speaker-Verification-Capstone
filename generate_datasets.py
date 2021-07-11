@@ -184,7 +184,7 @@ def write_pairs_dataset(pairs, pairs_path, speaker_spectrograms):
 def write_triplets_dataset(triplets, triplets_path, speaker_spectrograms):
     print('Writing', triplets_path)
     with tf.io.TFRecordWriter(triplets_path) as writer:
-        for i, pair_data in enumerate(triplets):
+        for pair_data in triplets:
             spectA_b = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]].tobytes()
             spectP_b = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]].tobytes()
             spectN_b = speaker_spectrograms[pair_data[2][0]][pair_data[2][1]].tobytes()

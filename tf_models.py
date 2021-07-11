@@ -42,7 +42,7 @@ class ContrastiveLossLayer(Layer):
         return loss
 '''
 
-'''
+
 class TripletLossLayer(Layer):
     def __init__(self, margin, **kwargs):
         self.margin = margin
@@ -58,25 +58,7 @@ class TripletLossLayer(Layer):
         loss = self.triplet_loss(inputs)
         self.add_loss(loss)
         return loss
-'''
-class TripletLossLayer(Layer):
-    def __init__(self, margin, **kwargs):
-        self.margin = margin
-        super(TripletLossLayer, self).__init__(**kwargs)
-    
-    def triplet_loss(self, inputs):
-        anchor = inputs['anchor_input']
-        positive = inputs['positive_input']
-        negative = inputs['negative_input']
-        
-        p_dist = K.sum(K.square(anchor-positive), axis=-1)
-        n_dist = K.sum(K.square(anchor-negative), axis=-1)
-        return K.sum(K.maximum(p_dist - n_dist + self.margin, 0), axis=0)
-    
-    def call(self, inputs):
-        loss = self.triplet_loss(inputs)
-        self.add_loss(loss)
-        return loss
+
 
 
 class QuadrupletLossLayer(Layer):

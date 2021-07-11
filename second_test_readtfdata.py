@@ -14,6 +14,10 @@ tf.config.run_functions_eagerly(True)
 
 IMG_SHAPE = (130, 300, 1)
 file_path = 'test_contrastive_triplets.tfrecord'
+file_pathA = 'test_contrastive_triplets_anchor.tfrecord'
+file_pathP = 'test_contrastive_triplets_positive.tfrecord'
+file_pathN = 'test_contrastive_triplets_negative.tfrecord'
+
 with open('output/speaker_spectrograms.pkl', 'rb') as fin:
     speaker_spectrograms = pickle.load(fin)
 with open('output/contrastive_triplets.pkl', 'rb') as fin:
@@ -66,6 +70,7 @@ class TripletLossLayer(Layer):
         loss = self.triplet_loss(anchor, positive, negative)
         self.add_loss(loss)
         return loss
+
 '''
 
 
@@ -88,8 +93,8 @@ def build_triplet_model(IMG_SHAPE):
     # Connect the inputs with the outputs
     triplet_model = Model(inputs=(anchor_input,positive_input,negative_input),outputs=loss_layer)
     return triplet_model
-
 '''
+
 def get_base_model(IMG_SHAPE):
     inputs = tf.keras.Input(shape=IMG_SHAPE)
     conv2d_1 = Conv2D(input_shape=(224,224,3),filters=64,kernel_size=(3,3),padding="same", activation="relu")(inputs)
@@ -123,8 +128,8 @@ def build_triplet_model(IMG_SHAPE):
 
     pred = Dense(1,activation='sigmoid')(l1_dist)
     return Model(inputs=[anchor_input, positive_input, negative_input], outputs=pred)
-
 '''
+
 
 
 '''
@@ -175,23 +180,40 @@ def _bytes_feature(value):
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
-with tf.io.TFRecordWriter(file_path) as writer:
-    for i, triplet_data in enumerate(triplet_locs):
-        spectA_b = speaker_spectrograms[triplet_data[0][0]][triplet_data[0][1]].tobytes()
-        spectP_b = speaker_spectrograms[triplet_data[1][0]][triplet_data[1][1]].tobytes()
-        spectN_b = speaker_spectrograms[triplet_data[2][0]][triplet_data[2][1]].tobytes()
+with tf.io.TFRecordWriter(file_pathA) as writerA:
+    with tf.io.TFRecordWriter(file_pathP) as writerP:
+        with tf.io.TFRecordWriter(file_pathN) as writerN:
+            for i, triplet_data in enumerate(triplet_locs):
+                spectA_b = speaker_spectrograms[triplet_data[0][0]][triplet_data[0][1]].tobytes()
+                spectP_b = speaker_spectrograms[triplet_data[1][0]][triplet_data[1][1]].tobytes()
+                spectN_b = speaker_spectrograms[triplet_data[2][0]][triplet_data[2][1]].tobytes()
 
-        example = tf.train.Example(
-            features=tf.train.Features(
-                feature={
-                    'spectA': _bytes_feature(spectA_b),
-                    'spectP': _bytes_feature(spectP_b),
-                    'spectN': _bytes_feature(spectN_b)
-                }
-            )
-        )
-        writer.write(example.SerializeToString())
+                exampleA = tf.train.Example(
+                    features=tf.train.Features(
+                        feature={
+                            'spectA': _bytes_feature(spectA_b),
+                        }
+                    )
+                )
+                writerA.write(exampleA.SerializeToString())
 
+                exampleP = tf.train.Example(
+                    features=tf.train.Features(
+                        feature={
+                            'spectP': _bytes_feature(spectP_b),
+                        }
+                    )
+                )
+                writerP.write(exampleP.SerializeToString())
+
+                exampleN = tf.train.Example(
+                    features=tf.train.Features(
+                        feature={
+                            'spectN': _bytes_feature(spectN_b),
+                        }
+                    )
+                )
+                writerN.write(exampleN.SerializeToString())
 
 
 ##################################################################
@@ -199,49 +221,52 @@ with tf.io.TFRecordWriter(file_path) as writer:
 ##################################################################
 
 
-tfrecord_dataset = tf.data.TFRecordDataset([file_path])
+anchor_dataset = tf.data.TFRecordDataset([file_pathA])
+positive_dataset = tf.data.TFRecordDataset([file_pathP])
+negative_dataset = tf.data.TFRecordDataset([file_pathN])
+
 
 def _decode_img(img_bytes, IMG_SHAPE):
     img = tf.io.decode_raw(img_bytes, tf.float32)
     img.set_shape([IMG_SHAPE[0] * IMG_SHAPE[1] * IMG_SHAPE[2]])
     img = tf.reshape(img, IMG_SHAPE)
-    #img = img.numpy()
-
     return img
 
-def _read_contrastive_tfrecord(serialized_example):
-    feature_description = {
-        'spectA': tf.io.FixedLenFeature((), tf.string),
-        'spectP': tf.io.FixedLenFeature((), tf.string),
-        'spectN': tf.io.FixedLenFeature((), tf.string),
-    }
+def _read_contrastive_tfrecord_A(serialized_example):
+    feature_description = { 'spectA': tf.io.FixedLenFeature((), tf.string) }
     example = tf.io.parse_single_example(serialized_example, feature_description)
-    
     spectA = _decode_img(example['spectA'], IMG_SHAPE)
-    spectP = _decode_img(example['spectP'], IMG_SHAPE)
-    spectN = _decode_img(example['spectN'], IMG_SHAPE)
+    return spectA
 
-    #spectA = spectA[None,:,:,:]
-    #spectP = spectP[None,:,:,:]
-    #spectN = spectN[None,:,:,:]
+def _read_contrastive_tfrecord_P(serialized_example):
+    feature_description = { 'spectP': tf.io.FixedLenFeature((), tf.string) }
+    example = tf.io.parse_single_example(serialized_example, feature_description)
+    spectA = _decode_img(example['spectP'], IMG_SHAPE)
+    return spectA
 
-    #output = {
-    #    "anchor_input": spectA,
-    #    "positive_input": spectP,
-    #    "negative_input": spectN
-    #}
-    #return output
-    return tuple([spectA , spectP, spectN])
+def _read_contrastive_tfrecord_N(serialized_example):
+    feature_description = { 'spectN': tf.io.FixedLenFeature((), tf.string) }
+    example = tf.io.parse_single_example(serialized_example, feature_description)
+    spectA = _decode_img(example['spectN'], IMG_SHAPE)
+    return spectA
 
-parsed_dataset = tfrecord_dataset.map(_read_contrastive_tfrecord)
-parsed_dataset = parsed_dataset.batch(30).prefetch(1)
+anchor_dataset = anchor_dataset.map(_read_contrastive_tfrecord_A)
+positive_dataset = positive_dataset.map(_read_contrastive_tfrecord_P)
+negative_dataset = negative_dataset.map(_read_contrastive_tfrecord_N)
+
+anchor_dataset = anchor_dataset.batch(30).prefetch(1)
+positive_dataset = positive_dataset.batch(30).prefetch(1)
+negative_dataset = negative_dataset.batch(30).prefetch(1)
+
+parsed_dataset = tf.data.Dataset.zip((anchor_dataset, positive_dataset, negative_dataset))
+#parsed_dataset = parsed_dataset.batch(30).prefetch(1)
 
 
 #pdb.set_trace()
 
-#model = build_triplet_model(IMG_SHAPE)
-#model.compile(optimizer='adam') #, run_eagerly=True)
-#history = model.fit( parsed_dataset, batch_size=30, )
+model = build_triplet_model(IMG_SHAPE)
+model.compile(optimizer='adam') #, run_eagerly=True)
+history = model.fit( parsed_dataset, batch_size=30, )
 
 train_a = np.array([triplet[0] for triplet in triplets])
 train_p = np.array([triplet[1] for triplet in triplets])
@@ -252,6 +277,4 @@ model2.compile(optimizer='adam') #, run_eagerly=True)
 ####  compile and fit model  ####
 history = model2.fit(
         [train_a, train_p, train_n],
-        batch_size=30,
-        validation_split=.1
-)
+        batch_size=30,)

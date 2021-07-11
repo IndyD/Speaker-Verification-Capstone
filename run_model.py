@@ -69,6 +69,7 @@ def set_optimizer(OPTIMIZER, LEARNING_RATE, LEARNING_DECAY_RATE, LEARNING_DECAY_
 
     return opt
 
+'''
 def calculate_EER(dist, labels):
     # scale distances so EER works
     preds = dist / dist.max()
@@ -77,6 +78,31 @@ def calculate_EER(dist, labels):
     #EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
     #return EER
     return None
+'''
+def calculate_EER(dist, y_true):
+    fpr = []
+    tpr = []
+    thresholds = np.sort(dist)[::-1]
+
+    for threshold in thresholds:
+        y_pred = np.where(dist >= threshold, 1, 0)
+        
+        fp = np.sum((y_pred == 1) & (y_true == 0))
+        tp = np.sum((y_pred == 1) & (y_true == 1))
+        fn = np.sum((y_pred == 0) & (y_true == 1))
+        tn = np.sum((y_pred == 0) & (y_true == 0))
+        
+        fpr.append(fp / (fp + tn))
+        tpr.append(tp / (tp + fn))
+    
+    fpr = np.array(fpr)
+    tpr = np.array(tpr)
+    
+    fnr = 1 - tpr
+    eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
+    EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
+
+    return EER, eer_threshold
 
 def transfer_embedding_layers(embedding_layers, IMG_SHAPE):
     img_input = Input(IMG_SHAPE)
@@ -398,10 +424,11 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     val_paths = os.path.join(output_dir, 'contrastive_triplets_val.tfrecord')
 
     test_dataset = tf.data.TFRecordDataset([test_paths])
-    val_dataset = tf.data.TFRecordDataset([val_paths])
     test_dataset = test_dataset.map(_read_triplet_tfrecord)
-    val_dataset = val_dataset.map(_read_triplet_tfrecord)
     test_dataset = test_dataset.batch(PARAMS.TRAINING.BATCH_SIZE).prefetch(1)
+
+    val_dataset = tf.data.TFRecordDataset([val_paths])
+    val_dataset = val_dataset.map(_read_triplet_tfrecord)
     val_dataset = val_dataset.batch(PARAMS.TRAINING.BATCH_SIZE).prefetch(1)
 
     train_dataset = tf.data.TFRecordDataset([train_paths])
@@ -422,8 +449,8 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     ####  Transfer learning- take inital embedding layers and score pairs similarly to contrastive loss
     dist_test_initial, labels_test_initial = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
     if PARAMS.TRAINING.MINE_SEMIHARD == 'T':
-        initial_EER = calculate_EER(dist_test_initial, labels_test_initial)
-        logging.info("<<<< Initial EER: {EER} >>>>...".format(EER=initial_EER))
+        initial_EER, eer_threshold = calculate_EER(dist_test_initial, labels_test_initial)
+        logging.info("<<<< Initial EER: {EER} >>>> << threshold: {eth} >>".format(EER=initial_EER, eth=eer_threshold))
 
         #### Triplet mining
         logging.info("Mining semi-hard triplets...")
@@ -468,8 +495,8 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
     dist_test_initial, labels_test_initial = compute_labelled_distances(embedding_model, test_a, test_p, test_n1)
     if PARAMS.TRAINING.MINE_SEMIHARD == 'T':
-        initial_EER = calculate_EER(dist_test_initial, labels_test_initial)
-        logging.info("<<<< Initial EER: {EER} >>>>...".format(EER=initial_EER))
+        initial_EER, eer_threshold = calculate_EER(dist_test_initial, labels_test_initial)
+        logging.info("<<<< Initial EER: {EER} >>>> << threshold: {eth} >>".format(EER=initial_EER, eth=eer_threshold))
 
         #### Quadruplet mining
         logging.info("Mining semi-hard quadruplets...")
@@ -527,8 +554,8 @@ def pretrain_model(IMG_SHAPE, PARAMS):
     dist_test_crossentropy, labels_test_crossentropy = compute_labelled_distances(
         pretrained_embedding_model, test_a, test_p, test_n
     )
-    crossentropy_EER = calculate_EER(dist_test_crossentropy, labels_test_crossentropy)
-    print("<<<< Cross-entropy pre-train EER: {EER} >>>>...".format(EER=crossentropy_EER))
+    crossentropy_EER, eer_threshold = calculate_EER(dist_test_crossentropy, labels_test_crossentropy)
+    print("<<<< Cross-entropy pre-train EER: {EER} >>>> << threshold: {eth} >>".format(EER=crossentropy_EER, eth=eer_threshold))
 
     return pretrained_embedding_model_seq
 
