@@ -154,12 +154,12 @@ def write_datasets(items, data_type, output_dir, speaker_spectrograms, PARAMS):
     if data_type == 'pairs':
         write_pairs_dataset(items_train, train_path, speaker_spectrograms)
         write_pairs_dataset(items_val, val_path, speaker_spectrograms)
-        write_pairs_dataset(items_test, test_path, speaker_spectrograms)
+        #write_pairs_dataset(items_test, test_path, speaker_spectrograms)
 
     elif data_type == 'triplets':
         write_triplets_dataset(items_train, train_path, speaker_spectrograms)
         write_triplets_dataset(items_val, val_path, speaker_spectrograms)
-        write_triplets_dataset(items_test, test_path, speaker_spectrograms)
+        write_triplet_pkl(items_test, test_path, speaker_spectrograms)
 
     else:
         raise ValueError('Invalid datatype')
