@@ -8,7 +8,8 @@
 
 for config in "$@"; do
   echo "<<<< RUNNING CONFIG FILE: $config";
+  python3.9 generate_spectrograms.py "$config";
   python3 generate_datasets.py "$config";
-  python3 run_model.py "$config"
+  python3 run_model.py "$config";
 
 done
