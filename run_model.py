@@ -34,36 +34,35 @@ def test_train_val_split(items, test_split, val_split, seed=123):
     return train, test, validation
 
 def set_optimizer(OPTIMIZER, LEARNING_RATE, LEARNING_DECAY_RATE, LEARNING_DECAY_STEPS, MOMENTUM, BETA_1, BETA_2):
-    #lr_schedule = ExponentialDecay(
-    #    LEARNING_RATE,
-    #    decay_steps=LEARNING_DECAY_STEPS,
-    #    decay_rate=LEARNING_DECAY_RATE,
-    #    staircase=False
-    #)
+    lr_schedule = ExponentialDecay(
+        LEARNING_RATE,
+        decay_steps=LEARNING_DECAY_STEPS,
+        decay_rate=LEARNING_DECAY_RATE,
+        staircase=False
+    )
 
     if OPTIMIZER == 'adam':
         opt = Adam(
-            #learning_rate=lr_schedule, 
-            learning_rate=LEARNING_RATE, 
+            learning_rate=lr_schedule, 
+            #learning_rate=LEARNING_RATE, 
             beta_1=BETA_1,
             beta_2=BETA_2,
         )
     elif OPTIMIZER == 'sgd':
         opt = SGD(
-            #learning_rate=lr_schedule, 
-            learning_rate=LEARNING_RATE, 
+            learning_rate=lr_schedule, 
+            #learning_rate=LEARNING_RATE, 
             momentum=MOMENTUM
         )
     elif OPTIMIZER == 'adamax':
         opt = Adamax(
-            #learning_rate=lr_schedule, 
-            learning_rate=LEARNING_RATE, 
+            learning_rate=lr_schedule, 
+            #learning_rate=LEARNING_RATE, 
             beta_1=BETA_1,
             beta_2=BETA_2,
         )
     elif OPTIMIZER == 'nadam':
         opt = Nadam(
-            #learning_rate=LEARNING_RATE, 
             learning_rate=LEARNING_RATE, 
             beta_1=BETA_1,
             beta_2=BETA_2,
@@ -432,11 +431,11 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
     val_dataset = tf.data.TFRecordDataset([val_paths])
     val_dataset = val_dataset.map(_read_triplet_tfrecord)
-    val_dataset = val_dataset.batch(PARAMS.TRAINING.BATCH_SIZE).prefetch(1)
+    val_dataset = val_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=False).prefetch(1)
 
     train_dataset = tf.data.TFRecordDataset([train_paths])
     train_dataset = train_dataset.map(_read_triplet_tfrecord)
-    train_dataset = train_dataset.batch(PARAMS.TRAINING.BATCH_SIZE).prefetch(1)
+    train_dataset = train_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=False).prefetch(1)
 
     #### Initial training on all triplets
     logging.info("Training tripet loss model on all triplets...")
@@ -575,6 +574,7 @@ if __name__ == '__main__':
         1
     )
 
+    '''
     if PARAMS.MODEL.CROSSENTROPY_PRETRAIN == 'T':
         pretrain_model_path = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'pretrain_embedding_model')
         if PARAMS.TRAINING.USE_PREVIOUS_PRETRAIN_MODEL == 'T' and os.path.isfile(pretrain_model_path):
@@ -585,6 +585,9 @@ if __name__ == '__main__':
     else:
         pretrained_embedding_model_seq = None
 
+    '''
+    pretrained_embedding_model_seq = None
+
     ####  build model  ####
     if PARAMS.MODEL.LOSS_TYPE == 'contrastive':
         dist_test, labels_test = run_siamsese_model(IMG_SHAPE, PARAMS, pretrained_embedding_model_seq)
@@ -592,7 +595,7 @@ if __name__ == '__main__':
         dist_test, labels_test = run_triplet_model(IMG_SHAPE, PARAMS, pretrained_embedding_model_seq)
     if PARAMS.MODEL.LOSS_TYPE == 'quadruplet':
         dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS. pretrained_embedding_model_seq)
-
+    
     ####  Find EER   ####
     EER, eer_threshold = calculate_EER(dist_test, labels_test)
 
