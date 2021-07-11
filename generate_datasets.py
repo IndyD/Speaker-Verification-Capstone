@@ -148,17 +148,19 @@ def write_datasets(items, data_type, output_dir, speaker_spectrograms, PARAMS):
     )
 
     train_path = os.path.join(output_dir, 'contrastive_' + data_type + '_train.tfrecord')
-    test_path = os.path.join(output_dir, 'contrastive_' + data_type + '_test.tfrecord')
     val_path = os.path.join(output_dir, 'contrastive_' + data_type + '_val.tfrecord')
+    test_path = os.path.join(output_dir, 'contrastive_' + data_type + '_test.pkl')
 
     if data_type == 'pairs':
         write_pairs_dataset(items_train, train_path, speaker_spectrograms)
-        write_pairs_dataset(items_test, test_path, speaker_spectrograms)
         write_pairs_dataset(items_val, val_path, speaker_spectrograms)
+        write_pairs_dataset(items_test, test_path, speaker_spectrograms)
+
     elif data_type == 'triplets':
         write_triplets_dataset(items_train, train_path, speaker_spectrograms)
-        write_triplets_dataset(items_test, test_path, speaker_spectrograms)
         write_triplets_dataset(items_val, val_path, speaker_spectrograms)
+        write_triplets_dataset(items_test, test_path, speaker_spectrograms)
+
     else:
         raise ValueError('Invalid datatype')
 
@@ -180,6 +182,18 @@ def write_pairs_dataset(pairs, pairs_path, speaker_spectrograms):
                 )
             )
             writer.write(example.SerializeToString())
+
+def write_triplet_pkl(triplets, triplets_path, speaker_spectrograms):
+    triplets_data = []
+
+    print('Writing', triplets_path)
+    for pair_data in triplets:
+        spectA = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]]
+        spectP = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]]
+        spectN = speaker_spectrograms[pair_data[2][0]][pair_data[2][1]]
+        triplets_data.append((spectA, spectP, spectN))
+
+    utils.save(triplets_data, triplets_path)
 
 def write_triplets_dataset(triplets, triplets_path, speaker_spectrograms):
     print('Writing', triplets_path)

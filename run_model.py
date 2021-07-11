@@ -420,12 +420,10 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     train_paths = os.path.join(output_dir, 'contrastive_triplets_train.tfrecord')
-    test_paths = os.path.join(output_dir, 'contrastive_triplets_test.tfrecord')
     val_paths = os.path.join(output_dir, 'contrastive_triplets_val.tfrecord')
+    test_paths = os.path.join(output_dir, 'contrastive_triplets_test.pkl')
 
-    test_dataset = tf.data.TFRecordDataset([test_paths])
-    test_dataset = test_dataset.map(_read_triplet_tfrecord)
-    test_dataset = test_dataset.batch(PARAMS.TRAINING.BATCH_SIZE).prefetch(1)
+    triplets_test = utils.load(test_paths)
 
     val_dataset = tf.data.TFRecordDataset([val_paths])
     val_dataset = val_dataset.map(_read_triplet_tfrecord)
@@ -437,7 +435,7 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
     #### Initial training on all triplets
     logging.info("Training tripet loss model on all triplets...")
-    model = train_triplet_model(model, train_dataset, test_dataset , PARAMS)
+    model = train_triplet_model(model, train_dataset, val_dataset, PARAMS)
     embedding_layers = model.layers[3].layers
     embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
 
