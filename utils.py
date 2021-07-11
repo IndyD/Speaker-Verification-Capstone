@@ -10,6 +10,7 @@ def save(obj, obj_path):
 
 def load(obj_path):
     with open(obj_path, 'rb') as fin:
+        fin.seek(0)
         obj = pickle.load(fin)
     return obj
 

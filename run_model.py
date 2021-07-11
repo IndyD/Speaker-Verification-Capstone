@@ -34,32 +34,36 @@ def test_train_val_split(items, test_split, val_split, seed=123):
     return train, test, validation
 
 def set_optimizer(OPTIMIZER, LEARNING_RATE, LEARNING_DECAY_RATE, LEARNING_DECAY_STEPS, MOMENTUM, BETA_1, BETA_2):
-    lr_schedule = ExponentialDecay(
-        LEARNING_RATE,
-        decay_steps=LEARNING_DECAY_STEPS,
-        decay_rate=LEARNING_DECAY_RATE,
-        staircase=False
-    )
+    #lr_schedule = ExponentialDecay(
+    #    LEARNING_RATE,
+    #    decay_steps=LEARNING_DECAY_STEPS,
+    #    decay_rate=LEARNING_DECAY_RATE,
+    #    staircase=False
+    #)
 
     if OPTIMIZER == 'adam':
         opt = Adam(
-            learning_rate=lr_schedule, 
+            #learning_rate=lr_schedule, 
+            learning_rate=LEARNING_RATE, 
             beta_1=BETA_1,
             beta_2=BETA_2,
         )
     elif OPTIMIZER == 'sgd':
         opt = SGD(
-            learning_rate=lr_schedule, 
+            #learning_rate=lr_schedule, 
+            learning_rate=LEARNING_RATE, 
             momentum=MOMENTUM
         )
     elif OPTIMIZER == 'adamax':
         opt = Adamax(
-            learning_rate=lr_schedule, 
+            #learning_rate=lr_schedule, 
+            learning_rate=LEARNING_RATE, 
             beta_1=BETA_1,
             beta_2=BETA_2,
         )
     elif OPTIMIZER == 'nadam':
         opt = Nadam(
+            #learning_rate=LEARNING_RATE, 
             learning_rate=LEARNING_RATE, 
             beta_1=BETA_1,
             beta_2=BETA_2,
@@ -85,7 +89,7 @@ def calculate_EER(dist, y_true):
     thresholds = np.sort(dist)[::-1]
 
     for threshold in thresholds:
-        y_pred = np.where(dist >= threshold, 1, 0)
+        y_pred = np.where(dist >= threshold, 0, 1)
         
         fp = np.sum((y_pred == 1) & (y_true == 0))
         tp = np.sum((y_pred == 1) & (y_true == 1))
@@ -99,7 +103,7 @@ def calculate_EER(dist, y_true):
     tpr = np.array(tpr)
     
     fnr = 1 - tpr
-    eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
+    eer_threshold = thresholds[np.nanargmin(np.absolute((fnr - fpr)))]
     EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
 
     return EER, eer_threshold
@@ -242,7 +246,8 @@ def train_triplet_model(model, train_dataset, val_dataset, PARAMS, modifier=None
         train_dataset,
         validation_data=val_dataset,
         epochs=PARAMS.TRAINING.EPOCHS,
-        batch_size=PARAMS.TRAINING.BATCH_SIZE,
+        #batch_size=PARAMS.TRAINING.BATCH_SIZE,
+        #batch_size=None,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
     )
