@@ -161,7 +161,7 @@ def compute_labelled_distances(embedding_model, anchors, positives, negatives):
 def mine_triplets(embedding_model, PARAMS):
     semihard_triplets = []
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
-    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
+    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectrograms.pkl'))
     positive_pair_locs = generate_datasets.find_positive_pairs(speaker_spectograms)
 
     i = PARAMS.DATA_GENERATOR.N_SAMPLES
@@ -453,7 +453,7 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     dist_test_initial, labels_test_initial = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
     if PARAMS.TRAINING.MINE_SEMIHARD == 'T':
         initial_EER, eer_threshold = calculate_EER(dist_test_initial, labels_test_initial)
-        logging.info("<<<< Initial EER: {EER} >>>> << threshold: {eth} >>".format(EER=initial_EER, eth=eer_threshold))
+        print("<<<< Initial EER: {EER} >>>> << threshold: {eth} >>".format(EER=initial_EER, eth=eer_threshold))
 
         #### Triplet mining
         logging.info("Mining semi-hard triplets...")
@@ -499,7 +499,7 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     dist_test_initial, labels_test_initial = compute_labelled_distances(embedding_model, test_a, test_p, test_n1)
     if PARAMS.TRAINING.MINE_SEMIHARD == 'T':
         initial_EER, eer_threshold = calculate_EER(dist_test_initial, labels_test_initial)
-        logging.info("<<<< Initial EER: {EER} >>>> << threshold: {eth} >>".format(EER=initial_EER, eth=eer_threshold))
+        print("<<<< Initial EER: {EER} >>>> << threshold: {eth} >>".format(EER=initial_EER, eth=eer_threshold))
 
         #### Quadruplet mining
         logging.info("Mining semi-hard quadruplets...")
@@ -576,7 +576,12 @@ if __name__ == '__main__':
     )
 
     if PARAMS.MODEL.CROSSENTROPY_PRETRAIN == 'T':
-        pretrained_embedding_model_seq = pretrain_model(IMG_SHAPE, PARAMS)
+        pretrain_model_path = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'pretrain_embedding_model')
+        if PARAMS.TRAINING.USE_PREVIOUS_PRETRAIN_MODEL == 'T' and os.path.isfile(pretrain_model_path):
+            pretrained_embedding_model_seq = tf.keras.models.load_model(pretrain_model_path)
+        else:
+            pretrained_embedding_model_seq = pretrain_model(IMG_SHAPE, PARAMS)
+            pretrained_embedding_model_seq.save(pretrain_model_path)
     else:
         pretrained_embedding_model_seq = None
 
@@ -589,9 +594,8 @@ if __name__ == '__main__':
         dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS. pretrained_embedding_model_seq)
 
     ####  Find EER   ####
-    EER = calculate_EER(dist_test, labels_test)
-
+    EER, eer_threshold = calculate_EER(dist_test, labels_test)
 
     print('-'*60)
-    print('<<<<<  The EER is:  {EER} !  >>>>>'.format(EER=EER))
+    print('<<<<<  The EER is:  {EER} !  >>>>> << threshold: {eth} >>'.format(EER=EER, eth=eer_threshold))
     print('#'*80)
