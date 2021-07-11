@@ -8,7 +8,7 @@ import tensorflow as tf
 import numpy as np
 
 #from sklearn.model_selection import train_test_split
-#from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_curve
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Input
 from tensorflow.keras.callbacks import EarlyStopping
@@ -72,15 +72,13 @@ def set_optimizer(OPTIMIZER, LEARNING_RATE, LEARNING_DECAY_RATE, LEARNING_DECAY_
 
     return opt
 
-'''
+
 def calculate_EER(dist, labels):
-    # scale distances so EER works
-    preds = dist / dist.max()
-    #fpr, tpr, _ = roc_curve(labels, preds, pos_label=0)
-    #fnr = 1 - tpr
-    #EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
-    #return EER
-    return None
+    fpr, tpr, threshold = roc_curve(labels, dist, pos_label=0)
+    fnr = 1 - tpr
+    eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
+    EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
+    return EER, eer_threshold
 '''
 def calculate_EER(dist, y_true):
     fpr = []
@@ -106,6 +104,7 @@ def calculate_EER(dist, y_true):
     EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
 
     return EER, eer_threshold
+'''
 
 def transfer_embedding_layers(embedding_layers, IMG_SHAPE):
     img_input = Input(IMG_SHAPE)
@@ -527,19 +526,20 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
 def pretrain_model(IMG_SHAPE, PARAMS):
     model = run_cross_entropy_model(IMG_SHAPE, PARAMS)
-    triplet_path = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets.pkl')
+    triplet_path = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets_test.pkl')
 
-    if not os.path.isfile(triplet_path):
-        speaker_spectrograms = utils.load(
-            os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'speaker_spectograms.pkl')
-        )
-        triplets = generate_datasets.make_contrastive_triplets(
-            speaker_spectrograms, 
-            PARAMS.DATA_GENERATOR.N_SAMPLES,
-        )
-        utils.save(triplets, triplet_path)
-    else:
-        triplets = utils.load(triplet_path)
+    #if not os.path.isfile(triplet_path):
+    #    speaker_spectrograms = utils.load(
+    #        os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'speaker_spectograms.pkl')
+    #    )
+    #    triplets = generate_datasets.make_contrastive_triplets(
+    #        speaker_spectrograms, 
+    #        PARAMS.DATA_GENERATOR.N_SAMPLES,
+    #    )
+    #    utils.save(triplets, triplet_path)
+    #else:
+    #    triplets = utils.load(triplet_path)
+    triplets = utils.load(triplet_path)
 
     random.shuffle(triplets)
     test_split = int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
@@ -574,19 +574,19 @@ if __name__ == '__main__':
         1
     )
 
-    '''
+    
     if PARAMS.MODEL.CROSSENTROPY_PRETRAIN == 'T':
         pretrain_model_path = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'pretrain_embedding_model')
-        if PARAMS.TRAINING.USE_PREVIOUS_PRETRAIN_MODEL == 'T' and os.path.isfile(pretrain_model_path):
+        if PARAMS.TRAINING.USE_PREVIOUS_PRETRAIN_MODEL == 'T':
+            logging.info('Loading previous pretraining model...')
             pretrained_embedding_model_seq = tf.keras.models.load_model(pretrain_model_path)
         else:
+            logging.info('Pretraining cross-entropy loss model...')
             pretrained_embedding_model_seq = pretrain_model(IMG_SHAPE, PARAMS)
             pretrained_embedding_model_seq.save(pretrain_model_path)
     else:
         pretrained_embedding_model_seq = None
 
-    '''
-    pretrained_embedding_model_seq = None
 
     ####  build model  ####
     if PARAMS.MODEL.LOSS_TYPE == 'contrastive':
