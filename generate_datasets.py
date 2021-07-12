@@ -155,12 +155,14 @@ def write_datasets(items, data_type, output_dir, speaker_spectrograms, PARAMS):
         write_pairs_dataset(items_train, train_path, speaker_spectrograms)
         write_pairs_dataset(items_val, val_path, speaker_spectrograms)
         #write_pairs_dataset(items_test, test_path, speaker_spectrograms)
-
     elif data_type == 'triplets':
         write_triplets_dataset(items_train, train_path, speaker_spectrograms)
         write_triplets_dataset(items_val, val_path, speaker_spectrograms)
         write_triplet_pkl(items_test, test_path, speaker_spectrograms)
-
+    elif data_type == 'quadruplets':
+        write_quadruplets_dataset(items_train, train_path, speaker_spectrograms)
+        write_quadruplets_dataset(items_val, val_path, speaker_spectrograms)
+        write_quadruplet_pkl(items_test, test_path, speaker_spectrograms)
     else:
         raise ValueError('Invalid datatype')
 
@@ -214,6 +216,42 @@ def write_triplets_dataset(triplets, triplets_path, speaker_spectrograms):
             )
             writer.write(example.SerializeToString())
 
+def write_quadruplet_pkl(quadruplets, quadruplets_path, speaker_spectrograms):
+    quadruplets_data = []
+
+    print('Writing', quadruplets_path)
+    for quadruplet_data in quadruplets:
+        spectA = speaker_spectrograms[quadruplet_data[0][0]][quadruplet_data[0][1]]
+        spectP = speaker_spectrograms[quadruplet_data[1][0]][quadruplet_data[1][1]]
+        spectN1 = speaker_spectrograms[quadruplet_data[2][0]][quadruplet_data[2][1]]
+        spectN2 = speaker_spectrograms[quadruplet_data[3][0]][quadruplet_data[3][1]]
+        quadruplets_data.append((spectA, spectP, spectN1, spectN2))
+
+    utils.save(quadruplet_data, quadruplets_path)
+
+
+def write_quadruplets_dataset(quadruplets, quadruplets_path, speaker_spectrograms):
+    print('Writing', quadruplets_path)
+    with tf.io.TFRecordWriter(quadruplets_path) as writer:
+        for quadruplet_data in quadruplets:
+            spectA_b = speaker_spectrograms[quadruplet_data[0][0]][quadruplet_data[0][1]].tobytes()
+            spectP_b = speaker_spectrograms[quadruplet_data[1][0]][quadruplet_data[1][1]].tobytes()
+            spectN1_b = speaker_spectrograms[quadruplet_data[2][0]][quadruplet_data[2][1]].tobytes()
+            spectN2_b = speaker_spectrograms[quadruplet_data[3][0]][quadruplet_data[3][1]].tobytes()
+
+            example = tf.train.Example(
+                features=tf.train.Features(
+                    feature={
+                        'spectA': _bytes_feature(spectA_b),
+                        'spectP': _bytes_feature(spectP_b),
+                        'spectN1': _bytes_feature(spectN1_b),
+                        'spectN2': _bytes_feature(spectN2_b)
+                    }
+                )
+            )
+            writer.write(example.SerializeToString())
+
+
 if __name__ == "__main__":
     ### Set variables from config file ###
     PARAMS = utils.config_init(sys.argv)
@@ -258,4 +296,5 @@ if __name__ == "__main__":
                 speaker_spectrograms, 
                 PARAMS.DATA_GENERATOR.N_SAMPLES,
             )
+            write_datasets(quadruplets, 'quadruplets', output_dir, speaker_spectrograms, PARAMS)
             utils.save(quadruplets, quadruplets_path)

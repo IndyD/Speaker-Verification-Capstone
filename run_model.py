@@ -150,6 +150,28 @@ def _read_triplet_tfrecord(serialized_example):
     return output
     #return spectA , spectP, spectN
 
+def _read_quadruplet_tfrecord(serialized_example):
+    feature_description = {
+        'spectA': tf.io.FixedLenFeature((), tf.string),
+        'spectP': tf.io.FixedLenFeature((), tf.string),
+        'spectN1': tf.io.FixedLenFeature((), tf.string),
+        'spectN2': tf.io.FixedLenFeature((), tf.string),
+    }
+    example = tf.io.parse_single_example(serialized_example, feature_description)
+    
+    spectA = _decode_img(example['spectA'], IMG_SHAPE)
+    spectP = _decode_img(example['spectP'], IMG_SHAPE)
+    spectN1 = _decode_img(example['spectN1'], IMG_SHAPE)
+    spectN2 = _decode_img(example['spectN2'], IMG_SHAPE)
+
+    output = {
+        "anchor_input": spectA,
+        "positive_input": spectP,
+        "negative_input1": spectN1,
+        "negative_input2": spectN2,
+    }
+    return output
+
 def compute_labelled_distances(embedding_model, anchors, positives, negatives):
     dist_p, dist_n = compute_contrastive_embeddings(embedding_model, anchors, positives, negatives)
     dist = np.array(dist_p + dist_n)
@@ -220,11 +242,6 @@ def mine_quadruplets(embedding_model, PARAMS):
     return semihard_quadruplets
 
 def train_triplet_model(model, train_dataset, val_dataset, PARAMS, modifier=None):
-    ## train-test split the spectograms  ####
-    #train_a = np.array([triplet[0] for triplet in triplets_train])
-    #train_p = np.array([triplet[1] for triplet in triplets_train])
-    #train_n = np.array([triplet[2] for triplet in triplets_train])
-
     opt = set_optimizer(
         OPTIMIZER=PARAMS.TRAINING.OPTIMIZER, 
         LEARNING_RATE=PARAMS.TRAINING.LEARNING_RATE, 
@@ -236,33 +253,18 @@ def train_triplet_model(model, train_dataset, val_dataset, PARAMS, modifier=None
     )
     ####  compile and fit model  ####
     model.compile(optimizer=opt)
-    #pdb.set_trace()
 
     history = model.fit(
-        #[train_a, train_p, train_n],
-        #triplets_train,
         train_dataset,
         validation_data=val_dataset,
         epochs=PARAMS.TRAINING.EPOCHS,
         #batch_size=PARAMS.TRAINING.BATCH_SIZE,
-        #batch_size=None,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
     )
     return model
 
-def train_quadruplet_model(model, quadruplets, PARAMS):
-    ## train-test split
-    quadruplets_train, quadruplets_test, quadruplets_val = test_train_val_split(
-        quadruplets, PARAMS.DATA_GENERATOR.TEST_SPLIT, PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
-    )
-
-    ####  split and normalize the spectograms  ####
-    train_a = np.array([quadruplet[0] for quadruplet in quadruplets_train])
-    train_p = np.array([quadruplet[1] for quadruplet in quadruplets_train])
-    train_n1 = np.array([quadruplet[2] for quadruplet in quadruplets_train])
-    train_n2 = np.array([quadruplet[3] for quadruplet in quadruplets_train])
-
+def train_quadruplet_model(model, train_dataset, val_dataset, PARAMS):
     opt = set_optimizer(
         OPTIMIZER=PARAMS.TRAINING.OPTIMIZER, 
         LEARNING_RATE=PARAMS.TRAINING.LEARNING_RATE, 
@@ -275,15 +277,17 @@ def train_quadruplet_model(model, quadruplets, PARAMS):
     ####  compile and fit model  ####
     model.compile(optimizer=opt)
     history = model.fit(
-        [train_a, train_p, train_n1, train_n2],
-        validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
+        #[train_a, train_p, train_n1, train_n2],
+        #validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
+        train_dataset,
+        validation_data=val_dataset,
         epochs=PARAMS.TRAINING.EPOCHS,
         batch_size=PARAMS.TRAINING.BATCH_SIZE,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
 
     )
-    return model, quadruplets_test
+    return model
 
 def run_cross_entropy_model(IMG_SHAPE, PARAMS):
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
@@ -417,9 +421,6 @@ def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
 def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS, embedding_model=embedding_model)
-    #triplets = utils.load(
-    #    os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets.pkl')
-    #)
 
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     train_paths = os.path.join(output_dir, 'contrastive_triplets_train.tfrecord')
@@ -479,13 +480,28 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
 def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     model = tf_models.build_quadruplet_model(IMG_SHAPE, PARAMS)
-    quadruplets = utils.load(
-        os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_quadruplets.pkl')
-    )
+    #quadruplets = utils.load(
+    #    os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_quadruplets.pkl')
+    #)
+
+    output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
+    train_paths = os.path.join(output_dir, 'contrastive_quadruplets_train.tfrecord')
+    val_paths = os.path.join(output_dir, 'contrastive_quadruplets_val.tfrecord')
+    test_paths = os.path.join(output_dir, 'contrastive_quadruplets_test.pkl')
+
+    quadruplets_test = utils.load(test_paths)
+
+    val_dataset = tf.data.TFRecordDataset([val_paths])
+    val_dataset = val_dataset.map(_read_quadruplet_tfrecord)
+    val_dataset = val_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=False).prefetch(1)
+
+    train_dataset = tf.data.TFRecordDataset([train_paths])
+    train_dataset = train_dataset.map(_read_quadruplet_tfrecord)
+    train_dataset = train_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=False).prefetch(1)
 
     #### Initial training on all quadruplets
     logging.info("Training quadruplet loss model on all quadruplets...")
-    model, quadruplets_test = train_quadruplet_model(model, quadruplets, PARAMS)
+    model = train_quadruplet_model(model, train_dataset, val_dataset, PARAMS)
     embedding_layers = model.layers[4].layers
     embedding_model = transfer_embedding_layers(embedding_layers, IMG_SHAPE)
 
@@ -507,9 +523,9 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
         logging.info("Training quadruplet loss model on semi-hard quadruplets...")
         if PARAMS.TRAINING.SEMIHARD_FRESH_MODEL == 'T':
             model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS)
-            model, _ = train_triplet_model(model, semihard_quadruplets, PARAMS)
+            model, _ = train_quadruplet_model(model, semihard_quadruplets, PARAMS)
         else:
-            model, _ = train_triplet_model(model, semihard_quadruplets, PARAMS)
+            model, _ = train_quadruplet_model(model, semihard_quadruplets, PARAMS)
 
         ####  Transfer learning- take embedding layers and score pairs similarly to contrastive loss
         embedding_layers = model.layers[4].layers
@@ -549,7 +565,6 @@ def pretrain_model(IMG_SHAPE, PARAMS):
     test_p = np.array([triplet[1] for triplet in triplets_test])
     test_n = np.array([triplet[2] for triplet in triplets_test])
 
-    pdb.set_trace()
     pretrained_embedding_layers = model.layers[:-1]
     pretrained_embedding_model = transfer_embedding_layers(pretrained_embedding_layers, IMG_SHAPE)
 
@@ -576,7 +591,6 @@ if __name__ == '__main__':
         PARAMS.DATA_GENERATOR.MAX_FRAMES,
         1
     )
-
     
     if PARAMS.MODEL.CROSSENTROPY_PRETRAIN == 'T':
         pretrain_model_path = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'pretrain_embedding_model')
@@ -597,7 +611,7 @@ if __name__ == '__main__':
     if PARAMS.MODEL.LOSS_TYPE == 'triplet':
         dist_test, labels_test = run_triplet_model(IMG_SHAPE, PARAMS, pretrained_embedding_model_seq)
     if PARAMS.MODEL.LOSS_TYPE == 'quadruplet':
-        dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS. pretrained_embedding_model_seq)
+        dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS, pretrained_embedding_model_seq)
     
     ####  Find EER   ####
     EER, eer_threshold = calculate_EER(dist_test, labels_test)
