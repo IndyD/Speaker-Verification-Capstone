@@ -104,10 +104,10 @@ def make_contrastive_triplets(corpus_data, n_triplets):
 def find_two_random_negatives(corpus_data, exclude):
     candidates = [cand for cand in corpus_data if cand != exclude]
     speaker_ids = random.sample(candidates, 2)
-    random_negativeA = random.choice(corpus_data[speaker_ids[0]])
-    random_negativeB = random.choice(corpus_data[speaker_ids[1]])
+    random_negativeA = random.choice(range(len(corpus_data[speaker_ids[0]])))
+    random_negativeB = random.choice(range(len(corpus_data[speaker_ids[1]])))
 
-    return random_negativeA, random_negativeB
+    return (speaker_ids[0], random_negativeA), (speaker_ids[1], random_negativeB)
 
 def make_contrastive_quadruplets(corpus_data, n_quadruplets):
     quadruplets = []
@@ -120,13 +120,13 @@ def make_contrastive_quadruplets(corpus_data, n_quadruplets):
         idx1 = positive_pair_locs[i][1]
         idx2 = positive_pair_locs[i][2]
 
-        negativeA, negativeB = find_two_random_negatives(corpus_data, spkr)
+        (spkrN1, idx3), (spkrN2, idx4) = find_two_random_negatives(corpus_data, spkr)
 
         quadruplet = (
-            corpus_data[spkr][idx1], 
-            corpus_data[spkr][idx2], 
-            negativeA,
-            negativeB
+            (spkr, idx1), 
+            (spkr, idx2), 
+            (spkrN1, idx3),
+            (spkrN2, idx4)
         )
         quadruplets.append(quadruplet)
 
