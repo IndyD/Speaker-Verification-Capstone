@@ -125,6 +125,33 @@ def build_siamese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     ''' Build a siamese vgg7 model that computes the distance between two images '''
     if not embedding_model:
         embedding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
+    else:
+        if PARAMS.MODEL.N_DENSE == 1:
+            embedding_model.add(
+                Dense(
+                    PARAMS.MODEL.DENSE1_NODES, 
+                    kernel_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY),
+                    bias_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY)
+                )
+            )
+            embedding_model.add(Activation(PARAMS.MODEL.DENSE_ACTIVATION))
+        elif PARAMS.MODEL.N_DENSE == 2:
+            embedding_model.add(
+                Dense(
+                    PARAMS.MODEL.DENSE1_NODES, 
+                    kernel_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY),
+                    bias_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY)
+                )
+            )
+            embedding_model.add(Activation(PARAMS.MODEL.DENSE_ACTIVATION))
+            embedding_model.add(
+                Dense(
+                    PARAMS.MODEL.DENSE2_NODES, 
+                    kernel_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY),
+                    bias_regularizer=tf.keras.regularizers.l2(PARAMS.MODEL.L2_WEIGHT_DECAY)
+                )
+            )
+            embedding_model.add(Activation(PARAMS.MODEL.DENSE_ACTIVATION))
     
     imgA = Input(shape=IMG_SHAPE)
     imgB = Input(shape=IMG_SHAPE)

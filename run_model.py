@@ -549,9 +549,9 @@ def pretrain_model(IMG_SHAPE, PARAMS):
     test_p = np.array([triplet[1] for triplet in triplets_test])
     test_n = np.array([triplet[2] for triplet in triplets_test])
 
+    pdb.set_trace()
     pretrained_embedding_layers = model.layers[:-1]
     pretrained_embedding_model = transfer_embedding_layers(pretrained_embedding_layers, IMG_SHAPE)
-    pretrained_embedding_model_seq = Sequential([Input(IMG_SHAPE)] + pretrained_embedding_layers)
 
     dist_test_crossentropy, labels_test_crossentropy = compute_labelled_distances(
         pretrained_embedding_model, test_a, test_p, test_n
@@ -559,7 +559,10 @@ def pretrain_model(IMG_SHAPE, PARAMS):
     crossentropy_EER, eer_threshold = calculate_EER(dist_test_crossentropy, labels_test_crossentropy)
     print("<<<< Cross-entropy pre-train EER: {EER} >>>> << threshold: {eth} >>".format(EER=crossentropy_EER, eth=eer_threshold))
 
-    return pretrained_embedding_model_seq
+    cnn_embedding_layers = model.layers[:-2]
+    pretrained_cnn_model_seq = Sequential([Input(IMG_SHAPE)] + cnn_embedding_layers)
+
+    return pretrained_cnn_model_seq
 
 
 
