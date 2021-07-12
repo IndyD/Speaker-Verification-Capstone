@@ -78,18 +78,7 @@ class QuadrupletLossLayer(Layer):
         self.add_loss(loss)
         return loss
 
-def get_vgg7_layers(IMG_SHAPE):
-    VGG16 = tf.keras.applications.VGG16(input_shape=IMG_SHAPE, include_top=False, weights=None)
-    VGG7 = VGG16.layers[0:7]
-    return VGG7
-
-def build_vgg7_embedding_model(IMG_SHAPE, PARAMS):
-    ''' 
-    Return and embedding model using the fist 7 layer of VGG16 w/ 2 dense layers
-    This architechture is from the VGG7 implementaion of Velez
-    '''
-    ## Note that VGG16 was trained on 3 channels. We can't use the weights w/ 1 channel so set to None
-    VGG7 = get_vgg7_layers(IMG_SHAPE)
+def get_embedding_layers(PARAMS):
     if PARAMS.MODEL.N_DENSE == 1:
         embedding_layers = [
             Flatten(name='flatten'),
@@ -118,11 +107,26 @@ def build_vgg7_embedding_model(IMG_SHAPE, PARAMS):
         ]
     else:
         raise ValueError('ERROR: Invalid PARAMS.MODEL.N_DENSE value!')
+
+    return embedding_layers
+
+def get_vgg7_layers(IMG_SHAPE):
+    VGG16 = tf.keras.applications.VGG16(input_shape=IMG_SHAPE, include_top=False, weights=None)
+    VGG7 = VGG16.layers[0:7]
+    return VGG7
+
+def build_vgg7_embedding_model(IMG_SHAPE, PARAMS):
+    ''' 
+    Return and embedding model using the fist 7 layer of VGG16 w/ 2 dense layers
+    This architechture is from the VGG7 implementaion of Velez
+    '''
+    ## Note that VGG16 was trained on 3 channels. We can't use the weights w/ 1 channel so set to None
+    VGG7 = get_vgg7_layers(IMG_SHAPE)
+    embedding_layers = get_embedding_layers(PARAMS)
     embedding_model = Sequential(VGG7 + embedding_layers)
     return embedding_model
 
-def build_siamese_model(IMG_SHAPE, PARAMS, embedding_model=None):
-    ''' Build a siamese vgg7 model that computes the distance between two images '''
+def set_embedding_model(embedding_model, IMG_SHAPE, PARAMS):
     if not embedding_model:
         embedding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
     else:
@@ -152,6 +156,12 @@ def build_siamese_model(IMG_SHAPE, PARAMS, embedding_model=None):
                 )
             )
             embedding_model.add(Activation(PARAMS.MODEL.DENSE_ACTIVATION))
+
+    return embedding_model
+
+def build_siamese_model(IMG_SHAPE, PARAMS, embedding_model=None):
+    ''' Build a siamese vgg7 model that computes the distance between two images '''
+    embedding_model = set_embedding_model(embedding_model, IMG_SHAPE, PARAMS)
     
     imgA = Input(shape=IMG_SHAPE)
     imgB = Input(shape=IMG_SHAPE)
@@ -164,6 +174,7 @@ def build_siamese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     return siamese_vgg7_model
 
 
+"""
 def build_siamese_model_new(IMG_SHAPE, PARAMS, embedding_model=None):
     ''' Build a triplet vgg7 model that computes the distance between
     an anchor image, a positive image, and a negative image '''
@@ -184,13 +195,12 @@ def build_siamese_model_new(IMG_SHAPE, PARAMS, embedding_model=None):
     # Connect the inputs with the outputs
     triplet_model = Model(inputs=[anchor_input,positive_input,negative_input],outputs=loss_layer)
     return triplet_model
-
+"""
 
 def build_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     ''' Build a triplet vgg7 model that computes the distance between
     an anchor image, a positive image, and a negative image '''
-    if not embedding_model:
-        embedding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
+    embedding_model = set_embedding_model(embedding_model, IMG_SHAPE, PARAMS)
     embedding_model.add(Lambda(lambda x: K.l2_normalize(x,axis=-1)))
     
     anchor_input = Input(IMG_SHAPE, name="anchor_input")
@@ -212,8 +222,7 @@ def build_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 def build_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     ''' Build a quadruplet vgg7 model that computes the distance between
     an anchor image, a positive image, and two dissimilar negative images '''
-    if not embedding_model:
-        embedding_model = build_vgg7_embedding_model(IMG_SHAPE, PARAMS)
+    embedding_model = set_embedding_model(embedding_model, IMG_SHAPE, PARAMS)
     embedding_model.add(Lambda(lambda x: K.l2_normalize(x,axis=-1)))
     
     anchor_input = Input(IMG_SHAPE, name="anchor_input")
