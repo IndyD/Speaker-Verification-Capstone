@@ -62,7 +62,7 @@ def trim_spectrogram(spect, params):
     else:
         return spect[:,:params.DATA_GENERATOR.MAX_FRAMES]
 
-def generate_spectrograms(audio_dir, spectogram_path, params):
+def generate_spectrograms(audio_dir, params):
     """
     Iteratively go thorugh each speaker dir, speech session dir, find the biggest
     utterance per speech session, convert that to a trimmed spectogram, and store in dict
@@ -109,11 +109,19 @@ if __name__ == "__main__":
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
-    spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms.pkl')
+    train_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_train.pkl')
+    test_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_test.pkl')
     overwrite_spect = PARAMS.DATA_GENERATOR.OVERWRITE_SPECT
 
     ### Generate or load spectograms ###
-    if overwrite_spect == 'T' or not os.path.isfile(spectrogram_path):
+    if overwrite_spect == 'T' or not os.path.isfile(train_spectrogram_path):
         logging.info("Generating spectograms...")
-        speaker_spectrograms = generate_spectrograms(audio_dir, spectrogram_path, PARAMS)
-        utils.save(speaker_spectrograms, spectrogram_path)
+        speaker_spectrograms = generate_spectrograms(audio_dir, PARAMS)
+        train_speakers, test_speakers = utils.test_train_split(
+            list(speaker_spectrograms.keys()),
+            PARAMS.DATA_GENERATOR.TEST_SPLIT
+        )
+        train_spectrograms = dict((k, speaker_spectrograms[k]) for k in train_speakers)
+        test_spectrograms = dict((k, speaker_spectrograms[k]) for k in test_speakers)
+        utils.save(train_spectrograms, train_spectrogram_path)
+        utils.save(test_spectrograms, test_spectrogram_path)

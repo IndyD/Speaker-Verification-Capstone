@@ -219,7 +219,7 @@ def mine_quadruplets(embedding_model, PARAMS):
         idx1 = positive_pair_locs[i][1]
         idx2 = positive_pair_locs[i][2]
 
-        negativeA, negativeB = generate_datasets.find_two_random_negatives(speakerspeaker_spectrograms_spectograms, spkr)
+        negativeA, negativeB = generate_datasets.find_two_random_negatives(speaker_spectrograms, spkr)
 
         cand_quadruplet = (
             speaker_spectrograms[spkr][idx1], 
@@ -291,20 +291,20 @@ def train_quadruplet_model(model, train_dataset, val_dataset, PARAMS):
 
 def run_cross_entropy_model(IMG_SHAPE, PARAMS):
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
-    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectrograms.pkl'))
-    n_classes = len(speaker_spectograms.keys())
+    speaker_spectrograms = utils.load(os.path.join(output_dir, 'speaker_spectrograms_train.pkl'))
+    n_classes = len(speaker_spectrograms.keys())
     X = []
     y = []
 
     ## This changes the label to integers so cross-entropy loss works
-    for i, spk in enumerate(speaker_spectograms.keys()):
-        for spect in speaker_spectograms[spk]:
+    for i, spk in enumerate(speaker_spectrograms.keys()):
+        for spect in speaker_spectrograms[spk]:
             X.append(spect)
             y.append(i)
 
     X = np.array(X)
     y = np.array(y)
-    del speaker_spectograms
+    del speaker_spectrograms
 
     model = tf_models.build_crossentropy_model(n_classes, IMG_SHAPE, PARAMS)
 
@@ -542,24 +542,8 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
 def pretrain_model(IMG_SHAPE, PARAMS):
     model = run_cross_entropy_model(IMG_SHAPE, PARAMS)
-    triplet_path = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets_test.pkl')
-
-    #if not os.path.isfile(triplet_path):
-    #    speaker_spectrograms = utils.load(
-    #        os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'speaker_spectograms.pkl')
-    #    )
-    #    triplets = generate_datasets.make_contrastive_triplets(
-    #        speaker_spectrograms, 
-    #        PARAMS.DATA_GENERATOR.N_SAMPLES,
-    #    )
-    #    utils.save(triplets, triplet_path)
-    #else:
-    #    triplets = utils.load(triplet_path)
-    triplets = utils.load(triplet_path)
-
-    random.shuffle(triplets)
-    test_split = int(len(triplets) * PARAMS.DATA_GENERATOR.TEST_SPLIT)
-    triplets_test = triplets[:test_split]
+    test_triplet_path = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_triplets_test.pkl')
+    triplets_test = utils.load(test_triplet_path)
 
     test_a = np.array([triplet[0] for triplet in triplets_test])
     test_p = np.array([triplet[1] for triplet in triplets_test])
@@ -606,7 +590,6 @@ if __name__ == '__main__':
             pretrained_embedding_model_seq.save(pretrain_model_path)
     else:
         pretrained_embedding_model_seq = None
-
 
     ####  build model  ####
     if PARAMS.MODEL.LOSS_TYPE == 'contrastive':

@@ -50,6 +50,21 @@ def find_negative_pair(corpus_data):
 
     return speakers, data
 
+def find_random_negative(corpus_data, exclude):
+    candidates = [cand for cand in corpus_data if cand != exclude]
+    speaker_id = random.choice(candidates)
+    random_negative = random.choice(range(len(corpus_data[speaker_id])))
+    return speaker_id, random_negative
+
+
+def find_two_random_negatives(corpus_data, exclude):
+    candidates = [cand for cand in corpus_data if cand != exclude]
+    speaker_ids = random.sample(candidates, 2)
+    random_negativeA = random.choice(range(len(corpus_data[speaker_ids[0]])))
+    random_negativeB = random.choice(range(len(corpus_data[speaker_ids[1]])))
+
+    return (speaker_ids[0], random_negativeA), (speaker_ids[1], random_negativeB)
+
 def make_contrastive_pairs(corpus_data, n_pairs):
     pair_data = []    
     positive_pair_locs = find_positive_pairs(corpus_data)
@@ -78,12 +93,6 @@ def make_contrastive_pairs(corpus_data, n_pairs):
 
     return pair_data
 
-def find_random_negative(corpus_data, exclude):
-    candidates = [cand for cand in corpus_data if cand != exclude]
-    speaker_id = random.choice(candidates)
-    random_negative = random.choice(range(len(corpus_data[speaker_id])))
-    return speaker_id, random_negative
-
 def make_contrastive_triplets(corpus_data, n_triplets):
     triplets = []
     positive_pair_locs = find_positive_pairs(corpus_data)
@@ -100,14 +109,6 @@ def make_contrastive_triplets(corpus_data, n_triplets):
         triplets.append(triplet)
 
     return triplets
-
-def find_two_random_negatives(corpus_data, exclude):
-    candidates = [cand for cand in corpus_data if cand != exclude]
-    speaker_ids = random.sample(candidates, 2)
-    random_negativeA = random.choice(range(len(corpus_data[speaker_ids[0]])))
-    random_negativeB = random.choice(range(len(corpus_data[speaker_ids[1]])))
-
-    return (speaker_ids[0], random_negativeA), (speaker_ids[1], random_negativeB)
 
 def make_contrastive_quadruplets(corpus_data, n_quadruplets):
     quadruplets = []
@@ -143,13 +144,11 @@ def _int64_feature(value):
   return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
 def write_datasets(items, data_type, output_dir, speaker_spectrograms, PARAMS):
-    items_train, items_test, items_val = utils.test_train_val_split(
-        items, PARAMS.DATA_GENERATOR.TEST_SPLIT, PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
-    )
+    split = (1.0 / (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT) ) * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
+    items_train, items_val = utils.test_train_split(items, split)
 
     train_path = os.path.join(output_dir, 'contrastive_' + data_type + '_train.tfrecord')
     val_path = os.path.join(output_dir, 'contrastive_' + data_type + '_val.tfrecord')
-    test_path = os.path.join(output_dir, 'contrastive_' + data_type + '_test.pkl')
 
     if data_type == 'pairs':
         write_pairs_dataset(items_train, train_path, speaker_spectrograms)
@@ -158,13 +157,50 @@ def write_datasets(items, data_type, output_dir, speaker_spectrograms, PARAMS):
     elif data_type == 'triplets':
         write_triplets_dataset(items_train, train_path, speaker_spectrograms)
         write_triplets_dataset(items_val, val_path, speaker_spectrograms)
-        write_triplet_pkl(items_test, test_path, speaker_spectrograms)
+        #write_triplet_pkl(items_test, test_path, speaker_spectrograms)
     elif data_type == 'quadruplets':
         write_quadruplets_dataset(items_train, train_path, speaker_spectrograms)
         write_quadruplets_dataset(items_val, val_path, speaker_spectrograms)
-        write_quadruplet_pkl(items_test, test_path, speaker_spectrograms)
+        #write_quadruplet_pkl(items_test, test_path, speaker_spectrograms)
     else:
         raise ValueError('Invalid datatype')
+
+def write_pairs_pkl(pairs, pairs_path, speaker_spectrograms):
+    pairs_data = []
+
+    print('Writing', pairs_path)
+    for pair in pairs:
+        spectL = speaker_spectrograms[pair[0][0]][pair[0][1]]
+        spectR = speaker_spectrograms[pair[1][0]][pair[1][1]]
+        label = pair[2]
+        pairs_data.append((spectL, spectR, label))
+
+    utils.save(pairs_data, pairs_path)
+
+def write_triplet_pkl(triplets, triplets_path, speaker_spectrograms):
+    triplets_data = []
+
+    print('Writing', triplets_path)
+    for pair_data in triplets:
+        spectA = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]]
+        spectP = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]]
+        spectN = speaker_spectrograms[pair_data[2][0]][pair_data[2][1]]
+        triplets_data.append((spectA, spectP, spectN))
+
+    utils.save(triplets_data, triplets_path)
+
+def write_quadruplet_pkl(quadruplets, quadruplets_path, speaker_spectrograms):
+    quadruplets_data = []
+
+    print('Writing', quadruplets_path)
+    for quadruplet_locs in quadruplets:
+        spectA = speaker_spectrograms[quadruplet_locs[0][0]][quadruplet_locs[0][1]]
+        spectP = speaker_spectrograms[quadruplet_locs[1][0]][quadruplet_locs[1][1]]
+        spectN1 = speaker_spectrograms[quadruplet_locs[2][0]][quadruplet_locs[2][1]]
+        spectN2 = speaker_spectrograms[quadruplet_locs[3][0]][quadruplet_locs[3][1]]
+        quadruplets_data.append((spectA, spectP, spectN1, spectN2))
+
+    utils.save(quadruplets_data, quadruplets_path)
 
 def write_pairs_dataset(pairs, pairs_path, speaker_spectrograms):
     print('Writing', pairs_path)
@@ -185,18 +221,6 @@ def write_pairs_dataset(pairs, pairs_path, speaker_spectrograms):
             )
             writer.write(example.SerializeToString())
 
-def write_triplet_pkl(triplets, triplets_path, speaker_spectrograms):
-    triplets_data = []
-
-    print('Writing', triplets_path)
-    for pair_data in triplets:
-        spectA = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]]
-        spectP = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]]
-        spectN = speaker_spectrograms[pair_data[2][0]][pair_data[2][1]]
-        triplets_data.append((spectA, spectP, spectN))
-
-    utils.save(triplets_data, triplets_path)
-
 def write_triplets_dataset(triplets, triplets_path, speaker_spectrograms):
     print('Writing', triplets_path)
     with tf.io.TFRecordWriter(triplets_path) as writer:
@@ -215,20 +239,6 @@ def write_triplets_dataset(triplets, triplets_path, speaker_spectrograms):
                 )
             )
             writer.write(example.SerializeToString())
-
-def write_quadruplet_pkl(quadruplets, quadruplets_path, speaker_spectrograms):
-    quadruplets_data = []
-
-    print('Writing', quadruplets_path)
-    for quadruplet_locs in quadruplets:
-        spectA = speaker_spectrograms[quadruplet_locs[0][0]][quadruplet_locs[0][1]]
-        spectP = speaker_spectrograms[quadruplet_locs[1][0]][quadruplet_locs[1][1]]
-        spectN1 = speaker_spectrograms[quadruplet_locs[2][0]][quadruplet_locs[2][1]]
-        spectN2 = speaker_spectrograms[quadruplet_locs[3][0]][quadruplet_locs[3][1]]
-        quadruplets_data.append((spectA, spectP, spectN1, spectN2))
-
-    utils.save(quadruplets_data, quadruplets_path)
-
 
 def write_quadruplets_dataset(quadruplets, quadruplets_path, speaker_spectrograms):
     print('Writing', quadruplets_path)
@@ -259,42 +269,60 @@ if __name__ == "__main__":
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
-    spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms.pkl')
-    pairs_path = os.path.join(output_dir, 'contrastive_pairs.pkl')
-    triplets_path = os.path.join(output_dir, 'contrastive_triplets.pkl')
-    quadruplets_path = os.path.join(output_dir, 'contrastive_quadruplets.pkl')
+    train_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_train.pkl')
+    test_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_test.pkl')
+    test_pairs_path = os.path.join(output_dir, 'contrastive_pairs.pkl')
+    test_triplets_path = os.path.join(output_dir, 'contrastive_triplets.pkl')
+    test_quadruplets_path = os.path.join(output_dir, 'contrastive_quadruplets.pkl')
     overwrite_datasets = PARAMS.DATA_GENERATOR.OVERWRITE_DATASETS
-    speaker_spectrograms = utils.load(spectrogram_path)
+    train_speaker_spectrograms = utils.load(train_spectrogram_path)
+    test_speaker_spectrograms = utils.load(test_spectrogram_path)
+
     
     ### Generate or contrastive pairs ###
     if PARAMS.MODEL.LOSS_TYPE == 'contrastive':
-        if overwrite_datasets == 'T' or not os.path.isfile(pairs_path):
+        if overwrite_datasets == 'T' or not os.path.isfile(test_pairs_path):
             logging.info("Generating pairs for contrastive loss...")
-            pairs = make_contrastive_pairs(
-                speaker_spectrograms, 
-                PARAMS.DATA_GENERATOR.N_SAMPLES
+            pairs_train = make_contrastive_pairs(
+                train_speaker_spectrograms, 
+                int(PARAMS.DATA_GENERATOR.N_SAMPLES * (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT)),
             )
-            write_datasets(pairs, 'pairs', output_dir, speaker_spectrograms, PARAMS)
-            utils.save(pairs, pairs_path)
+            pairs_test = make_contrastive_pairs(
+                train_speaker_spectrograms, 
+                int(PARAMS.DATA_GENERATOR.N_SAMPLES * PARAMS.DATA_GENERATOR.TEST_SPLIT)
+            )
+            write_datasets(pairs_train, 'pairs', output_dir, train_speaker_spectrograms, PARAMS)
+            write_pairs_pkl(pairs_test, test_pairs_path, test_speaker_spectrograms)
+            #utils.save(pairs_train, pairs_path)
 
     ### Generate or contrastive triplets ###
     if PARAMS.MODEL.LOSS_TYPE == 'triplet':
-        if overwrite_datasets == 'T' or not os.path.isfile(triplets_path):
+        if overwrite_datasets == 'T' or not os.path.isfile(test_triplets_path):
             logging.info("Generating triplets for triplet loss...")
-            triplets = make_contrastive_triplets(
-                speaker_spectrograms, 
-                PARAMS.DATA_GENERATOR.N_SAMPLES,
+            triplets_train = make_contrastive_triplets(
+                train_speaker_spectrograms, 
+                int(PARAMS.DATA_GENERATOR.N_SAMPLES * (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT)),
             )
-            write_datasets(triplets, 'triplets', output_dir, speaker_spectrograms, PARAMS)
-            utils.save(triplets, triplets_path)
+            triplets_test = make_contrastive_triplets(
+                test_speaker_spectrograms, 
+                int(PARAMS.DATA_GENERATOR.N_SAMPLES * PARAMS.DATA_GENERATOR.TEST_SPLIT),
+            )
+            write_datasets(triplets_train, 'triplets', output_dir, train_speaker_spectrograms, PARAMS)
+            write_triplet_pkl(triplets_test, test_triplets_path, test_speaker_spectrograms)
+            #utils.save(triplets_train, triplets_path)
 
     ### Generate or contrastive quadruplets ###
     if PARAMS.MODEL.LOSS_TYPE == 'quadruplet':
-        if overwrite_datasets == 'T' or not os.path.isfile(quadruplets_path):
+        if overwrite_datasets == 'T' or not os.path.isfile(test_quadruplets_path):
             logging.info("Generating quadruplets for quadruplet loss...")
-            quadruplets = make_contrastive_quadruplets(
-                speaker_spectrograms, 
-                PARAMS.DATA_GENERATOR.N_SAMPLES,
+            quadruplets_train = make_contrastive_quadruplets(
+                train_speaker_spectrograms, 
+                int(PARAMS.DATA_GENERATOR.N_SAMPLES * (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT)),
             )
-            write_datasets(quadruplets, 'quadruplets', output_dir, speaker_spectrograms, PARAMS)
-            utils.save(quadruplets, quadruplets_path)
+            quadruplets_test = make_contrastive_quadruplets(
+                test_speaker_spectrograms, 
+                int(PARAMS.DATA_GENERATOR.N_SAMPLES * PARAMS.DATA_GENERATOR.TEST_SPLIT),
+            )
+            write_datasets(quadruplets_train, 'quadruplets', output_dir, train_speaker_spectrograms, PARAMS)
+            write_quadruplet_pkl(quadruplets_test, test_quadruplets_path, test_speaker_spectrograms)
+            #utils.save(quadruplets_train, quadruplets_path)

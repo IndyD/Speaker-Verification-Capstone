@@ -20,6 +20,16 @@ def listdir_nohidden(input):
     dirlist = [dir for dir in dirlist if not dir.startswith('.')]
     return dirlist
 
+def test_train_split(items, test_split, seed=123):
+    assert test_split >=  0
+    assert test_split <=  1
+
+    random.Random(seed).shuffle(items)
+    test_split_idx = int(len(items) * test_split)
+    test = items[:test_split_idx]
+    train = items[test_split_idx:]
+    return train, test
+
 def test_train_val_split(items, test_split, val_split, seed=123):
     assert test_split >=  0
     assert test_split <=  1
