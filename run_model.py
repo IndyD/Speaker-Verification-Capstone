@@ -181,8 +181,8 @@ def compute_labelled_distances(embedding_model, anchors, positives, negatives):
 def mine_triplets(embedding_model, PARAMS):
     semihard_triplets = []
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
-    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectrograms.pkl'))
-    positive_pair_locs = generate_datasets.find_positive_pairs(speaker_spectograms)
+    speaker_spectrograms = utils.load(os.path.join(output_dir, 'speaker_spectrograms.pkl'))
+    positive_pair_locs = generate_datasets.find_positive_pairs(speaker_spectrograms)
 
     i = PARAMS.DATA_GENERATOR.N_SAMPLES
 
@@ -192,8 +192,8 @@ def mine_triplets(embedding_model, PARAMS):
         idx1 = positive_pair_locs[i][1]
         idx2 = positive_pair_locs[i][2]
 
-        negative = generate_datasets.find_random_negative(speaker_spectograms, spkr)
-        cand_triplet = (speaker_spectograms[spkr][idx1], speaker_spectograms[spkr][idx2], negative)
+        negative = generate_datasets.find_random_negative(speaker_spectrograms, spkr)
+        cand_triplet = (speaker_spectrograms[spkr][idx1], speaker_spectrograms[spkr][idx2], negative)
         input_a = np.expand_dims(cand_triplet[0], axis=0)
         input_p = np.expand_dims(cand_triplet[1], axis=0)
         input_n = np.expand_dims(cand_triplet[2], axis=0)
@@ -208,8 +208,8 @@ def mine_triplets(embedding_model, PARAMS):
 def mine_quadruplets(embedding_model, PARAMS):
     semihard_quadruplets = []
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
-    speaker_spectograms = utils.load(os.path.join(output_dir, 'speaker_spectograms.pkl'))
-    positive_pair_locs = generate_datasets.find_positive_pairs(speaker_spectograms)
+    speaker_spectrograms = utils.load(os.path.join(output_dir, 'speaker_spectrograms.pkl'))
+    positive_pair_locs = generate_datasets.find_positive_pairs(speaker_spectrograms)
 
     i = PARAMS.DATA_GENERATOR.N_SAMPLES
 
@@ -219,11 +219,11 @@ def mine_quadruplets(embedding_model, PARAMS):
         idx1 = positive_pair_locs[i][1]
         idx2 = positive_pair_locs[i][2]
 
-        negativeA, negativeB = generate_datasets.find_two_random_negatives(speaker_spectograms, spkr)
+        negativeA, negativeB = generate_datasets.find_two_random_negatives(speakerspeaker_spectrograms_spectograms, spkr)
 
         cand_quadruplet = (
-            speaker_spectograms[spkr][idx1], 
-            speaker_spectograms[spkr][idx2], 
+            speaker_spectrograms[spkr][idx1], 
+            speaker_spectrograms[spkr][idx2], 
             negativeA,
             negativeB
         )
@@ -282,7 +282,7 @@ def train_quadruplet_model(model, train_dataset, val_dataset, PARAMS):
         train_dataset,
         validation_data=val_dataset,
         epochs=PARAMS.TRAINING.EPOCHS,
-        batch_size=PARAMS.TRAINING.BATCH_SIZE,
+        #batch_size=PARAMS.TRAINING.BATCH_SIZE,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
 
@@ -564,6 +564,9 @@ def pretrain_model(IMG_SHAPE, PARAMS):
     test_a = np.array([triplet[0] for triplet in triplets_test])
     test_p = np.array([triplet[1] for triplet in triplets_test])
     test_n = np.array([triplet[2] for triplet in triplets_test])
+
+    if PARAMS.TRAINING.FREEZE_PRETRAIN_BASE == 'T':
+        model.trainable = False
 
     pretrained_embedding_layers = model.layers[:-1]
     pretrained_embedding_model = transfer_embedding_layers(pretrained_embedding_layers, IMG_SHAPE)
