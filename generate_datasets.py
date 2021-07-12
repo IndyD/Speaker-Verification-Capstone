@@ -220,14 +220,14 @@ def write_quadruplet_pkl(quadruplets, quadruplets_path, speaker_spectrograms):
     quadruplets_data = []
 
     print('Writing', quadruplets_path)
-    for quadruplet_data in quadruplets:
-        spectA = speaker_spectrograms[quadruplet_data[0][0]][quadruplet_data[0][1]]
-        spectP = speaker_spectrograms[quadruplet_data[1][0]][quadruplet_data[1][1]]
-        spectN1 = speaker_spectrograms[quadruplet_data[2][0]][quadruplet_data[2][1]]
-        spectN2 = speaker_spectrograms[quadruplet_data[3][0]][quadruplet_data[3][1]]
+    for quadruplet_locs in quadruplets:
+        spectA = speaker_spectrograms[quadruplet_locs[0][0]][quadruplet_locs[0][1]]
+        spectP = speaker_spectrograms[quadruplet_locs[1][0]][quadruplet_locs[1][1]]
+        spectN1 = speaker_spectrograms[quadruplet_locs[2][0]][quadruplet_locs[2][1]]
+        spectN2 = speaker_spectrograms[quadruplet_locs[3][0]][quadruplet_locs[3][1]]
         quadruplets_data.append((spectA, spectP, spectN1, spectN2))
 
-    utils.save(quadruplet_data, quadruplets_path)
+    utils.save(quadruplets_data, quadruplets_path)
 
 
 def write_quadruplets_dataset(quadruplets, quadruplets_path, speaker_spectrograms):
