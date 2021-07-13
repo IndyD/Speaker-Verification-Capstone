@@ -166,8 +166,8 @@ def build_siamese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     imgA = Input(shape=IMG_SHAPE)
     imgB = Input(shape=IMG_SHAPE)
 
-    featsA = embedding_model(imgA)
-    featsB = embedding_model(imgB)
+    featsA = embedding_model(imgA, name="input1")
+    featsB = embedding_model(imgB, name="input2")
     
     distance = Lambda(euclidean_distance)([featsA, featsB])
     siamese_vgg7_model = Model(inputs=[imgA, imgB], outputs=distance)

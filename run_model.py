@@ -130,6 +130,20 @@ def _decode_img(img_bytes, IMG_SHAPE):
     img = tf.reshape(img, IMG_SHAPE)
     return img
 
+def _read_pair_tfrecord(serialized_example):
+    feature_description = {
+        'spect1': tf.io.FixedLenFeature((), tf.string),
+        'spect2': tf.io.FixedLenFeature((), tf.string),
+        'label': tf.io.FixedLenFeature((), tf.string),
+    }
+    example = tf.io.parse_single_example(serialized_example, feature_description)
+    
+    spect1 = _decode_img(example['spect1'], IMG_SHAPE)
+    spect2 = _decode_img(example['spect2'], IMG_SHAPE)
+    label = tf.io.decode_raw(example['label'], tf.float32)
+
+    return {'input1':spect1, 'input2':spect2}, label
+
 def _read_triplet_tfrecord(serialized_example):
     feature_description = {
         'spectA': tf.io.FixedLenFeature((), tf.string),
@@ -382,13 +396,21 @@ def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
     pdb.set_trace()
     '''
+    model = tf_models.build_siamese_model(IMG_SHAPE, PARAMS)
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     train_file_path = os.path.join(output_dir, 'contrastive_pairs_train.tfrecord')
-    test_file_paths = os.path.join(output_dir, 'contrastive_pairs_test.tfrecord')
-    val_file_paths = os.path.join(output_dir, 'contrastive_pairs_val.tfrecord')
+    val_file_path = os.path.join(output_dir, 'contrastive_pairs_val.tfrecord')
+    test_file_path = os.path.join(output_dir, 'contrastive_pairs_test.pkl')
+
+    pairs_test = utils.load(test_file_path)
+
     train_dataset = tf.data.TFRecordDataset([train_file_path])
-    test_dataset = tf.data.TFRecordDataset([test_file_paths])
-    val_dataset = tf.data.TFRecordDataset([val_file_paths])
+    train_dataset = train_dataset.map(_read_pair_tfrecord)
+    train_dataset = train_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=True).prefetch(1)
+
+    val_dataset = tf.data.TFRecordDataset([val_file_path])
+    val_dataset = val_dataset.map(_read_pair_tfrecord)
+    val_dataset = val_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=True).prefetch(1)
 
     opt = set_optimizer(
         OPTIMIZER=PARAMS.TRAINING.OPTIMIZER, 
@@ -407,13 +429,18 @@ def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     logging.info("Training contrastive pair model...")
 
     history = model.fit(
-        train_dataset, labels_train,
-        validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
+        train_dataset,
+        #validation_split=PARAMS.DATA_GENERATOR.VALIDATION_SPLIT,
+        validation_data=val_dataset,
         epochs=PARAMS.TRAINING.EPOCHS,
-        batch_size=PARAMS.TRAINING.BATCH_SIZE,
+        #batch_size=PARAMS.TRAINING.BATCH_SIZE,
         verbose=1,
         callbacks=[EarlyStopping(patience=PARAMS.TRAINING.EARLY_STOP_ROUNDS)],
     )
+
+    pairs_test_l = np.array([pair[0] for pair in pairs_test])
+    pairs_test_r = np.array([pair[1] for pair in pairs_test])
+    labels_test = np.array([pair[2] for pair in pairs_test])
 
     dist_test = model.predict([pairs_test_l, pairs_test_r])
     return dist_test, labels_test
@@ -431,11 +458,11 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
     val_dataset = tf.data.TFRecordDataset([val_paths])
     val_dataset = val_dataset.map(_read_triplet_tfrecord)
-    val_dataset = val_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=False).prefetch(1)
+    val_dataset = val_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=True).prefetch(1)
 
     train_dataset = tf.data.TFRecordDataset([train_paths])
     train_dataset = train_dataset.map(_read_triplet_tfrecord)
-    train_dataset = train_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=False).prefetch(1)
+    train_dataset = train_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=True).prefetch(1)
 
     #### Initial training on all triplets
     logging.info("Training tripet loss model on all triplets...")
@@ -493,11 +520,11 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
     val_dataset = tf.data.TFRecordDataset([val_paths])
     val_dataset = val_dataset.map(_read_quadruplet_tfrecord)
-    val_dataset = val_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=False).prefetch(1)
+    val_dataset = val_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=True).prefetch(1)
 
     train_dataset = tf.data.TFRecordDataset([train_paths])
     train_dataset = train_dataset.map(_read_quadruplet_tfrecord)
-    train_dataset = train_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=False).prefetch(1)
+    train_dataset = train_dataset.batch(PARAMS.TRAINING.BATCH_SIZE, drop_remainder=True).prefetch(1)
 
     #### Initial training on all quadruplets
     logging.info("Training quadruplet loss model on all quadruplets...")
