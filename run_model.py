@@ -7,7 +7,7 @@ import sys
 import tensorflow as tf
 import numpy as np
 
-#from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 from sklearn.metrics import roc_curve
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Input
@@ -78,7 +78,10 @@ def calculate_EER(dist, labels):
     fnr = 1 - tpr
     eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
     EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
-    return EER, eer_threshold
+    preds = preds = np.where(dist >= eer_threshold, 0, 1)
+    accuracy = accuracy_score(labels, preds)
+
+    return EER, eer_threshold, accuracy
 '''
 def calculate_EER(dist, y_true):
     fpr = []
@@ -478,8 +481,11 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     ####  Transfer learning- take inital embedding layers and score pairs similarly to contrastive loss
     dist_test_initial, labels_test_initial = compute_labelled_distances(embedding_model, test_a, test_p, test_n)
     if PARAMS.TRAINING.MINE_SEMIHARD == 'T':
-        initial_EER, eer_threshold = calculate_EER(dist_test_initial, labels_test_initial)
-        print("<<<< Initial EER: {EER} >>>> << threshold: {eth} >>".format(EER=initial_EER, eth=eer_threshold))
+        initial_EER, eer_threshold, acc = calculate_EER(dist_test_initial, labels_test_initial)
+        print("<<<< Initial EER: {EER} >>>> << threshold: {eth} >>, << accuracy: {acc} >>".format(
+                EER=initial_EER, eth=eer_threshold, acc = acc
+            )
+        )
 
         #### Triplet mining
         logging.info("Mining semi-hard triplets...")
@@ -539,9 +545,11 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
 
     dist_test_initial, labels_test_initial = compute_labelled_distances(embedding_model, test_a, test_p, test_n1)
     if PARAMS.TRAINING.MINE_SEMIHARD == 'T':
-        initial_EER, eer_threshold = calculate_EER(dist_test_initial, labels_test_initial)
-        print("<<<< Initial EER: {EER} >>>> << threshold: {eth} >>".format(EER=initial_EER, eth=eer_threshold))
-
+        initial_EER, eer_threshold, acc = calculate_EER(dist_test_initial, labels_test_initial)
+        print("<<<< Initial EER: {EER} >>>> << threshold: {eth} >>, << accuracy: {acc} >>".format(
+                EER=initial_EER, eth=eer_threshold, acc = acc
+            )
+        )
         #### Quadruplet mining
         logging.info("Mining semi-hard quadruplets...")
         semihard_quadruplets = mine_quadruplets(embedding_model, PARAMS)
@@ -585,8 +593,11 @@ def pretrain_model(IMG_SHAPE, PARAMS):
     dist_test_crossentropy, labels_test_crossentropy = compute_labelled_distances(
         pretrained_embedding_model, test_a, test_p, test_n
     )
-    crossentropy_EER, eer_threshold = calculate_EER(dist_test_crossentropy, labels_test_crossentropy)
-    print("<<<< Cross-entropy pre-train EER: {EER} >>>> << threshold: {eth} >>".format(EER=crossentropy_EER, eth=eer_threshold))
+    crossentropy_EER, eer_threshold, acc = calculate_EER(dist_test_crossentropy, labels_test_crossentropy)
+    print("<<<< Cross-entropy pre-train EER: {EER} >>>> << threshold: {eth} >> << accuracy: {acc} >>".format(
+            EER=crossentropy_EER, eth=eer_threshold, acc= acc
+        )
+    )
 
     cnn_embedding_layers = model.layers[:-2]
     pretrained_cnn_model_seq = Sequential([Input(IMG_SHAPE)] + cnn_embedding_layers)
@@ -627,8 +638,11 @@ if __name__ == '__main__':
         dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS, pretrained_embedding_model_seq)
     
     ####  Find EER   ####
-    EER, eer_threshold = calculate_EER(dist_test, labels_test)
+    EER, eer_threshold, acc = calculate_EER(dist_test, labels_test)
 
     print('-'*60)
-    print('<<<<<  The EER is:  {EER} !  >>>>> << threshold: {eth} >>'.format(EER=EER, eth=eer_threshold))
+    print('<<<<<  The EER is:  {EER} !  >>>>> << threshold: {eth} >> << accuracy: {acc} >>'.format(
+            EER=EER, eth=eer_threshold, acc=acc
+        )
+    )
     print('#'*80)
