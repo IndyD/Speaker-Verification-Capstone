@@ -288,7 +288,7 @@ if __name__ == "__main__":
                 int(PARAMS.DATA_GENERATOR.N_SAMPLES * (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT)),
             )
             pairs_test = make_contrastive_pairs(
-                train_speaker_spectrograms, 
+                test_speaker_spectrograms, 
                 int(PARAMS.DATA_GENERATOR.N_SAMPLES * PARAMS.DATA_GENERATOR.TEST_SPLIT)
             )
             write_datasets(pairs_train, 'pairs', output_dir, train_speaker_spectrograms, PARAMS)
