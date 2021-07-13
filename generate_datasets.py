@@ -271,9 +271,9 @@ if __name__ == "__main__":
         os.mkdir(output_dir)
     train_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_train.pkl')
     test_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_test.pkl')
-    test_pairs_path = os.path.join(output_dir, 'contrastive_pairs.pkl')
-    test_triplets_path = os.path.join(output_dir, 'contrastive_triplets.pkl')
-    test_quadruplets_path = os.path.join(output_dir, 'contrastive_quadruplets.pkl')
+    test_pairs_path = os.path.join(output_dir, 'contrastive_pairs_test.pkl')
+    test_triplets_path = os.path.join(output_dir, 'contrastive_triplets_test.pkl')
+    test_quadruplets_path = os.path.join(output_dir, 'contrastive_quadruplets_test.pkl')
     overwrite_datasets = PARAMS.DATA_GENERATOR.OVERWRITE_DATASETS
     train_speaker_spectrograms = utils.load(train_spectrogram_path)
     test_speaker_spectrograms = utils.load(test_spectrogram_path)
