@@ -78,7 +78,7 @@ def calculate_EER(dist, labels):
     fnr = 1 - tpr
     eer_threshold = threshold[np.nanargmin(np.absolute((fnr - fpr)))]
     EER = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
-    preds = preds = np.where(dist >= eer_threshold, 0, 1)
+    preds = np.where(dist >= eer_threshold, 0, 1)
     accuracy = accuracy_score(labels, preds)
 
     return EER, eer_threshold, accuracy
@@ -143,7 +143,7 @@ def _read_pair_tfrecord(serialized_example):
     
     spect1 = _decode_img(example['spect1'], IMG_SHAPE)
     spect2 = _decode_img(example['spect2'], IMG_SHAPE)
-    label = tf.io.decode_raw(example['label'], tf.float32)
+    label = tf.io.decode_raw(example['label'], tf.int8)
 
     return {'input1':spect1, 'input2':spect2}, label
 

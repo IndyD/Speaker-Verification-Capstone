@@ -208,7 +208,7 @@ def write_pairs_dataset(pairs, pairs_path, speaker_spectrograms):
         for pair_data in pairs:
             spect1_b = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]].tobytes()
             spect2_b = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]].tobytes()
-            label_b = np.array(pair_data[2]).tobytes()
+            label_b = np.array(pair_data[2], dtype=np.int8).tobytes()
 
             example = tf.train.Example(
                 features=tf.train.Features(
