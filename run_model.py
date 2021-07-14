@@ -137,14 +137,13 @@ def _read_pair_tfrecord(serialized_example):
     feature_description = {
         'spect1': tf.io.FixedLenFeature((), tf.string),
         'spect2': tf.io.FixedLenFeature((), tf.string),
-        'label': tf.io.FixedLenFeature((), tf.string),
+        'label': tf.io.FixedLenFeature((), tf.int64),
     }
     example = tf.io.parse_single_example(serialized_example, feature_description)
     
     spect1 = _decode_img(example['spect1'], IMG_SHAPE)
     spect2 = _decode_img(example['spect2'], IMG_SHAPE)
-    label = tf.io.decode_raw(example['label'], tf.int8)
-
+    label = example['label']
     return {'input1':spect1, 'input2':spect2}, label
 
 def _read_triplet_tfrecord(serialized_example):

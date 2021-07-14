@@ -46,7 +46,7 @@ def find_negative_pair(corpus_data):
     spk2_idx = random.choice(list(enumerate(corpus_data[spk2])))[0]
 
     speakers = (spk1, spk2)
-    data = ((spk1, spk1_idx), (spk2, spk2_idx), [0])
+    data = ((spk1, spk1_idx), (spk2, spk2_idx), 0)
 
     return speakers, data
 
@@ -80,7 +80,7 @@ def make_contrastive_pairs(corpus_data, n_pairs):
 
     for loc in positive_pair_locs:
         pair_data.append(
-            ((loc[0], loc[1]), (loc[0], loc[2]), [1])
+            ((loc[0], loc[1]), (loc[0], loc[2]), 1)
         )
     
     ## This ensures the same speaker pairs can't be considered more than twice (reverse is possible)
@@ -208,14 +208,14 @@ def write_pairs_dataset(pairs, pairs_path, speaker_spectrograms):
         for pair_data in pairs:
             spect1_b = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]].tobytes()
             spect2_b = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]].tobytes()
-            label_b = np.array(pair_data[2], dtype=np.int8).tobytes()
+            label = pair_data[2]
 
             example = tf.train.Example(
                 features=tf.train.Features(
                     feature={
                         'spect1': _bytes_feature(spect1_b),
                         'spect2': _bytes_feature(spect2_b),
-                        'label': _bytes_feature(label_b)
+                        'label': _int64_feature(label)
                     }
                 )
             )
