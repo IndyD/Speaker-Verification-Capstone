@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -J speaker_verification_id
 #SBATCH --output=output/log_%j.txt
-#SBATCH -p gpgpu-1 --gres=gpu:1 --mem=100G
+#SBATCH -p fp-gpgpu-3 --gres=gpu:2 --mem=100G
 #SBATCH -t 800
 #SBATCH -D /work/users/idhillon/Speaker-Verification-Capstone
 

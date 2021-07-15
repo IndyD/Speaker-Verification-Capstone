@@ -143,6 +143,10 @@ def _int64_feature(value):
   """Returns an int64_list from a bool / enum / int / uint."""
   return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
+def _float_feature(value):
+  """Returns a float_list from a float / double."""
+  return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+
 def write_datasets(items, data_type, output_dir, speaker_spectrograms, PARAMS):
     split = (1.0 / (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT) ) * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
     items_train, items_val = utils.test_train_split(items, split)
@@ -215,7 +219,7 @@ def write_pairs_dataset(pairs, pairs_path, speaker_spectrograms):
                     feature={
                         'spect1': _bytes_feature(spect1_b),
                         'spect2': _bytes_feature(spect2_b),
-                        'label': _int64_feature(label)
+                        'label': _float_feature(label)
                     }
                 )
             )

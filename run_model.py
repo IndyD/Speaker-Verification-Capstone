@@ -137,7 +137,7 @@ def _read_pair_tfrecord(serialized_example):
     feature_description = {
         'spect1': tf.io.FixedLenFeature((), tf.string),
         'spect2': tf.io.FixedLenFeature((), tf.string),
-        'label': tf.io.FixedLenFeature((), tf.int64),
+        'label': tf.io.FixedLenFeature((), tf.float32),
     }
     example = tf.io.parse_single_example(serialized_example, feature_description)
     
