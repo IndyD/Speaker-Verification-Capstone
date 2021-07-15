@@ -350,7 +350,7 @@ def run_cross_entropy_model(IMG_SHAPE, PARAMS):
     return model
 
 
-def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
+def run_siamsese_model(IMG_SHAPE, PARAMS, config_name, embedding_model=None):
     '''
     model = tf_models.build_siamese_model(IMG_SHAPE, PARAMS)
     val_size = PARAMS.DATA_GENERATOR.VALIDATION_SPLIT / (1.0 - PARAMS.DATA_GENERATOR.TEST_SPLIT)
@@ -399,10 +399,12 @@ def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     pdb.set_trace()
     '''
     model = tf_models.build_siamese_model(IMG_SHAPE, PARAMS)
+
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     train_file_path = os.path.join(output_dir, 'contrastive_pairs_train.tfrecord')
     val_file_path = os.path.join(output_dir, 'contrastive_pairs_val.tfrecord')
     test_file_path = os.path.join(output_dir, 'contrastive_pairs_test.pkl')
+    model_path = os.path.join(output_dir, 'contrastive_pairs_model{c}'.format(c = config_name))
 
     pairs_test = utils.load(test_file_path)
 
@@ -445,16 +447,19 @@ def run_siamsese_model(IMG_SHAPE, PARAMS, embedding_model=None):
     labels_test = np.array([pair[2] for pair in pairs_test])
 
     dist_test = model.predict([pairs_test_l, pairs_test_r])
+    model.save(model_path)
+
     return dist_test, labels_test
 
 
-def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
+def run_triplet_model(IMG_SHAPE, PARAMS, config_name, embedding_model=None):
     model = tf_models.build_triplet_model(IMG_SHAPE, PARAMS, embedding_model=embedding_model)
 
     output_dir = os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR)
     train_paths = os.path.join(output_dir, 'contrastive_triplets_train.tfrecord')
     val_paths = os.path.join(output_dir, 'contrastive_triplets_val.tfrecord')
     test_paths = os.path.join(output_dir, 'contrastive_triplets_test.pkl')
+    model_path = os.path.join(output_dir, 'contrastive_triplets_model_{c}'.format(c = config_name))
 
     triplets_test = utils.load(test_paths)
 
@@ -506,11 +511,12 @@ def run_triplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
         dist_test = dist_test_initial
         labels_test = labels_test_initial
 
+    embedding_model.save(model_path)
     return dist_test, labels_test
 
 
 
-def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
+def run_quadruplet_model(IMG_SHAPE, PARAMS, config_name, embedding_model=None):
     model = tf_models.build_quadruplet_model(IMG_SHAPE, PARAMS)
     #quadruplets = utils.load(
     #    os.path.join(os.path.dirname(__file__), PARAMS.PATHS.OUTPUT_DIR, 'contrastive_quadruplets.pkl')
@@ -520,6 +526,7 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
     train_paths = os.path.join(output_dir, 'contrastive_quadruplets_train.tfrecord')
     val_paths = os.path.join(output_dir, 'contrastive_quadruplets_val.tfrecord')
     test_paths = os.path.join(output_dir, 'contrastive_quadruplets_test.pkl')
+    model_path = os.path.join(output_dir, 'contrastive_quadruplets_model_{c}'.format(c = config_name))
 
     quadruplets_test = utils.load(test_paths)
 
@@ -569,6 +576,7 @@ def run_quadruplet_model(IMG_SHAPE, PARAMS, embedding_model=None):
         dist_test = dist_test_initial
         labels_test = labels_test_initial
 
+    embedding_model.save(model_path)
     return dist_test, labels_test
 
 
@@ -608,6 +616,7 @@ def pretrain_model(IMG_SHAPE, PARAMS):
 
 if __name__ == '__main__':
     PARAMS = utils.config_init(sys.argv)
+    config_name = os.path.splitext(str(sys.argv[1]))[0]
     print('#'*80)
     print('<<<< Config parameters:{p}'.format(p=PARAMS))
     IMG_SHAPE = (
@@ -630,11 +639,11 @@ if __name__ == '__main__':
 
     ####  build model  ####
     if PARAMS.MODEL.LOSS_TYPE == 'contrastive':
-        dist_test, labels_test = run_siamsese_model(IMG_SHAPE, PARAMS, pretrained_embedding_model_seq)
+        dist_test, labels_test = run_siamsese_model(IMG_SHAPE, PARAMS, config_name, pretrained_embedding_model_seq)
     if PARAMS.MODEL.LOSS_TYPE == 'triplet':
-        dist_test, labels_test = run_triplet_model(IMG_SHAPE, PARAMS, pretrained_embedding_model_seq)
+        dist_test, labels_test = run_triplet_model(IMG_SHAPE, PARAMS, config_name, pretrained_embedding_model_seq)
     if PARAMS.MODEL.LOSS_TYPE == 'quadruplet':
-        dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS, pretrained_embedding_model_seq)
+        dist_test, labels_test = run_quadruplet_model(IMG_SHAPE, PARAMS, config_name, pretrained_embedding_model_seq)
     
     ####  Find EER   ####
     EER, eer_threshold, acc = calculate_EER(dist_test, labels_test)
