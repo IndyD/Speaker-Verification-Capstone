@@ -5,7 +5,7 @@ import os
 import pickle
 import random
 import sys
-
+import scipy
 import numpy as np
 
 from collections import namedtuple, defaultdict
@@ -40,12 +40,14 @@ def generate_spectrogram(wavpath, params):
     """
     Take one file and generate a spectram for it 
     """
+    hamming = scipy.signal.windows.hamming(params.DATA_GENERATOR.WIN_LENGTH, False)
     y, sr = librosa.load(wavpath)
     S = librosa.feature.melspectrogram(
         y, 
         sr, ## 22050 Hz
         n_fft=params.DATA_GENERATOR.N_FFT, ## recommended by librosa for speech, results in 23ms frames @22050
         n_mels=params.DATA_GENERATOR.N_MELS, ## too many mels resulted in empty banks
+        window = hamming,
         win_length=params.DATA_GENERATOR.WIN_LENGTH, 
         hop_length=params.DATA_GENERATOR.HOP_LENGTH, ## tried to do 10 ms step as per VGGVox
     )
