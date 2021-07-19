@@ -113,17 +113,21 @@ if __name__ == "__main__":
         os.mkdir(output_dir)
     train_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_train.pkl')
     test_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_test.pkl')
+    val_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_val.pkl')
     overwrite_spect = PARAMS.DATA_GENERATOR.OVERWRITE_SPECT
 
     ### Generate or load spectograms ###
     if overwrite_spect == 'T' or not os.path.isfile(train_spectrogram_path):
         logging.info("Generating spectograms...")
         speaker_spectrograms = generate_spectrograms(audio_dir, PARAMS)
-        train_speakers, test_speakers = utils.test_train_split(
+        train_speakers, test_speakers, val_speakers = utils.test_train_val_split(
             list(speaker_spectrograms.keys()),
-            PARAMS.DATA_GENERATOR.TEST_SPLIT
+            PARAMS.DATA_GENERATOR.TEST_SPLIT,
+            PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
         )
         train_spectrograms = dict((k, speaker_spectrograms[k]) for k in train_speakers)
         test_spectrograms = dict((k, speaker_spectrograms[k]) for k in test_speakers)
+        val_spectrograms = dict((k, speaker_spectrograms[k]) for k in val_speakers)
         utils.save(train_spectrograms, train_spectrogram_path)
         utils.save(test_spectrograms, test_spectrogram_path)
+        utils.save(val_spectrograms, val_spectrogram_path)

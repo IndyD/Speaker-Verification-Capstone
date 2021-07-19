@@ -147,10 +147,7 @@ def _float_feature(value):
   """Returns a float_list from a float / double."""
   return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
 
-def write_datasets(items, data_type, output_dir, speaker_spectrograms, PARAMS):
-    split = (1.0 / (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT) ) * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT
-    items_train, items_val = utils.test_train_split(items, split)
-
+def write_datasets(items_train, items_val, data_type, output_dir, speaker_spectrograms, PARAMS):
     train_path = os.path.join(output_dir, 'contrastive_' + data_type + '_train.tfrecord')
     val_path = os.path.join(output_dir, 'contrastive_' + data_type + '_val.tfrecord')
 
@@ -275,13 +272,14 @@ if __name__ == "__main__":
         os.mkdir(output_dir)
     train_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_train.pkl')
     test_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_test.pkl')
+    val_spectrogram_path = os.path.join(output_dir, 'speaker_spectrograms_val.pkl')
     test_pairs_path = os.path.join(output_dir, 'contrastive_pairs_test.pkl')
     test_triplets_path = os.path.join(output_dir, 'contrastive_triplets_test.pkl')
     test_quadruplets_path = os.path.join(output_dir, 'contrastive_quadruplets_test.pkl')
     overwrite_datasets = PARAMS.DATA_GENERATOR.OVERWRITE_DATASETS
     train_speaker_spectrograms = utils.load(train_spectrogram_path)
     test_speaker_spectrograms = utils.load(test_spectrogram_path)
-
+    val_speaker_spectrograms = utils.load(val_spectrogram_path)
     
     ### Generate or contrastive pairs ###
     if PARAMS.MODEL.LOSS_TYPE == 'contrastive':
@@ -289,13 +287,17 @@ if __name__ == "__main__":
             logging.info("Generating pairs for contrastive loss...")
             pairs_train = make_contrastive_pairs(
                 train_speaker_spectrograms, 
-                int(PARAMS.DATA_GENERATOR.N_SAMPLES * (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT)),
+                int(PARAMS.DATA_GENERATOR.N_SAMPLES * (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT - PARAMS.DATA_GENERATOR.VALIDATION_SPLIT)),
+            )
+            pairs_val = make_contrastive_pairs(
+                val_speaker_spectrograms, 
+                int(PARAMS.DATA_GENERATOR.N_SAMPLES *  PARAMS.DATA_GENERATOR.VALIDATION_SPLIT),
             )
             pairs_test = make_contrastive_pairs(
                 test_speaker_spectrograms, 
                 int(PARAMS.DATA_GENERATOR.N_SAMPLES * PARAMS.DATA_GENERATOR.TEST_SPLIT)
             )
-            write_datasets(pairs_train, 'pairs', output_dir, train_speaker_spectrograms, PARAMS)
+            write_datasets(pairs_train, pairs_val, 'pairs', output_dir, train_speaker_spectrograms, PARAMS)
             write_pairs_pkl(pairs_test, test_pairs_path, test_speaker_spectrograms)
             #utils.save(pairs_train, pairs_path)
 
@@ -305,13 +307,17 @@ if __name__ == "__main__":
             logging.info("Generating triplets for triplet loss...")
             triplets_train = make_contrastive_triplets(
                 train_speaker_spectrograms, 
-                int(PARAMS.DATA_GENERATOR.N_SAMPLES * (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT)),
+                int(PARAMS.DATA_GENERATOR.N_SAMPLES * (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT - PARAMS.DATA_GENERATOR.VALIDATION_SPLIT)),
             )
+            triplets_val = make_contrastive_triplets(
+                val_speaker_spectrograms, 
+                int(PARAMS.DATA_GENERATOR.N_SAMPLES * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT),
+            ),
             triplets_test = make_contrastive_triplets(
                 test_speaker_spectrograms, 
                 int(PARAMS.DATA_GENERATOR.N_SAMPLES * PARAMS.DATA_GENERATOR.TEST_SPLIT),
             )
-            write_datasets(triplets_train, 'triplets', output_dir, train_speaker_spectrograms, PARAMS)
+            write_datasets(triplets_train, triplets_val, 'triplets', output_dir, train_speaker_spectrograms, PARAMS)
             write_triplet_pkl(triplets_test, test_triplets_path, test_speaker_spectrograms)
             #utils.save(triplets_train, triplets_path)
 
@@ -323,10 +329,14 @@ if __name__ == "__main__":
                 train_speaker_spectrograms, 
                 int(PARAMS.DATA_GENERATOR.N_SAMPLES * (1 - PARAMS.DATA_GENERATOR.TEST_SPLIT)),
             )
+            quadruplets_val = make_contrastive_quadruplets(
+                val_speaker_spectrograms, 
+                int(PARAMS.DATA_GENERATOR.N_SAMPLES * PARAMS.DATA_GENERATOR.TEST_SPLIT),
+            ),
             quadruplets_test = make_contrastive_quadruplets(
                 test_speaker_spectrograms, 
                 int(PARAMS.DATA_GENERATOR.N_SAMPLES * PARAMS.DATA_GENERATOR.TEST_SPLIT),
             )
-            write_datasets(quadruplets_train, 'quadruplets', output_dir, train_speaker_spectrograms, PARAMS)
+            write_datasets(quadruplets_train, quadruplets_val, 'quadruplets', output_dir, train_speaker_spectrograms, PARAMS)
             write_quadruplet_pkl(quadruplets_test, test_quadruplets_path, test_speaker_spectrograms)
             #utils.save(quadruplets_train, quadruplets_path)
