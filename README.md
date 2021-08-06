@@ -1,27 +1,14 @@
 # Speaker-Verification-Capstone
-Real-time text-independent one-shot speaker verification. Capstone project for SMU MSDS graduate program.
+Text-independent, one-shot speaker verification. Capstone project for SMU MSDS graduate program.
 
-## Maneframe Environment Setup:
-#### Create a virtual env to install soundfile (it can't be installed with conda)
-module load python/3
-python3 -m venv ~/.venv/capstone_env
-source ~/.venv/capstone_env/bin/activate
-pip3 install --upgrade pip
-pip install soundfile
-#### Also install librosa for spectral processing
-pip install soundfile
+This project uses the VoxCeleb dataset, which is a open dataset of over 7000 speakers and 1 million utterances (https://www.robots.ox.ac.uk/~vgg/data/voxceleb/) to create a speaker verification system that can be trained on this corpus and find the distances betwreen 2 arbitary voices.
 
-#### Insatll ffmpeg to convert audio 
-conda install -c conda-forge ffmpeg
+Three different neural network architechutes are tested: one using contrastive pairwise loss, one using triplet loss, and one using quaruplet loss. 
 
-## Using screen:
-### Always use screen for when running scripts
+To run the project: 
+1. Download the data (https://www.robots.ox.ac.uk/~vgg/data/voxceleb/vox2.html)
+2. Specify the directory (relative to the git repo) in the config.json file in th PATHS.AUDIO_DIR field
+3. Convert the audio wav using the m4a_to_wav.py as follows: python m4a_to_wav.py <AUDIO_DIR>
+4. Run the experiment: python run_experiment.py config.json
 
-#### Starting/Resuming a Screen:
-* Starting a screen-        screen -S <name> 
-* See what screens exist-   screen -ls
-* Resume a screen-          screen -r <name>
-  
-#### Commands while in screen:
-* Ctl-a d-   Detach from the screen
-* Ctl-a k-   Kill the screen
+This outputs the accuracy and EER along with the trained model in the specified output directory
