@@ -99,6 +99,7 @@ def make_contrastive_triplets(corpus_data, n_triplets):
 
     if n_triplets > len(positive_pair_locs):
         raise ValueError('Choosing an N_SAMPLES that is higher than possible with the data! Choose a smaller value!')
+    
     for i in range(n_triplets):
         spkr = positive_pair_locs[i][0]
         idx1 = positive_pair_locs[i][1]
@@ -226,7 +227,10 @@ def write_triplets_dataset(triplets, triplets_path, speaker_spectrograms):
     print('Writing', triplets_path)
     with tf.io.TFRecordWriter(triplets_path) as writer:
         for pair_data in triplets:
-            spectA_b = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]].tobytes()
+            try:
+                spectA_b = speaker_spectrograms[pair_data[0][0]][pair_data[0][1]].tobytes()
+            except:
+                pdb.set_trace()
             spectP_b = speaker_spectrograms[pair_data[1][0]][pair_data[1][1]].tobytes()
             spectN_b = speaker_spectrograms[pair_data[2][0]][pair_data[2][1]].tobytes()
 
@@ -312,7 +316,7 @@ if __name__ == "__main__":
             triplets_val = make_contrastive_triplets(
                 val_speaker_spectrograms, 
                 int(PARAMS.DATA_GENERATOR.N_SAMPLES * PARAMS.DATA_GENERATOR.VALIDATION_SPLIT),
-            ),
+            )
             triplets_test = make_contrastive_triplets(
                 test_speaker_spectrograms, 
                 int(PARAMS.DATA_GENERATOR.N_SAMPLES * PARAMS.DATA_GENERATOR.TEST_SPLIT),
